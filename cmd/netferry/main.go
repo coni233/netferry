@@ -20,6 +20,7 @@ import (
 
 	"github.com/coni233/netferry/internal/agentenv"
 	"github.com/coni233/netferry/internal/config"
+	"github.com/coni233/netferry/internal/detect"
 	"github.com/coni233/netferry/internal/proxy"
 	"github.com/coni233/netferry/internal/router"
 	"github.com/coni233/netferry/internal/service"
@@ -58,6 +59,8 @@ func runCLI(args []string) int {
 		return runStatus(args[1:])
 	case "config":
 		return runConfig(args[1:])
+	case "detect":
+		return runDetect(args[1:])
 	case "setup":
 		return runSetup(args[1:])
 	case "install":
@@ -525,12 +528,54 @@ func runConfig(args []string) int {
 	}
 }
 
+func runDetect(args []string) int {
+	fs := flag.NewFlagSet("detect", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	timeout := fs.Duration("timeout", 500*time.Millisecond, "per-protocol probe timeout")
+	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	candidates := detect.Detect(context.Background(), *timeout)
+	if len(candidates) == 0 {
+		if *jsonOutput {
+			fmt.Println("[]")
+		} else {
+			fmt.Println("no known local proxy endpoints detected")
+		}
+		return 1
+	}
+
+	if *jsonOutput {
+		encoded, err := json.MarshalIndent(candidates, "", "  ")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+			return 1
+		}
+		fmt.Println(string(encoded))
+		return 0
+	}
+
+	fmt.Println("detected local proxies:")
+	for _, candidate := range candidates {
+		fmt.Printf("  - %s\n", candidate.String())
+		if candidate.Upstream != "" {
+			fmt.Printf("    upstream: %s\n", candidate.Upstream)
+		} else {
+			fmt.Println("    upstream: unavailable (authentication is not supported)")
+		}
+	}
+	return 0
+}
+
 func runInstall(args []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
 	configFlag := fs.String("config", "", "configuration file path")
 	dryRun := fs.Bool("dry-run", false, "show actions without changing the system")
+	noDetect := fs.Bool("no-detect", false, "do not auto-detect a local proxy when creating config")
 
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -541,11 +586,12 @@ func runInstall(args []string) int {
 		return 1
 	}
 
-	settings, err := loadEffectiveSettings(configPath)
+	settings, detected, err := initialSettingsForInstall(configPath, !*noDetect)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
 		return 1
 	}
+	printDetectedProxy(detected)
 
 	if !*dryRun {
 		if err := config.WriteNew(configPath, settings); err != nil && !errors.Is(err, config.ErrAlreadyExists) {
@@ -579,6 +625,7 @@ func runSetup(args []string) int {
 	dryRun := fs.Bool("dry-run", false, "show actions without changing the system")
 	noService := fs.Bool("no-service", false, "do not install automatic startup")
 	noEnvironment := fs.Bool("no-env", false, "do not install proxy environment variables")
+	noDetect := fs.Bool("no-detect", false, "do not auto-detect a local proxy when creating config")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -588,11 +635,12 @@ func runSetup(args []string) int {
 		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
 		return 1
 	}
-	settings, err := loadEffectiveSettings(configPath)
+	settings, detected, err := initialSettingsForInstall(configPath, !*noDetect)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
 		return 1
 	}
+	printDetectedProxy(detected)
 
 	if !*dryRun {
 		if err := config.WriteNew(configPath, settings); err != nil && !errors.Is(err, config.ErrAlreadyExists) {
@@ -645,6 +693,45 @@ func loadEffectiveSettings(path string) (config.Settings, error) {
 		return config.Settings{}, err
 	}
 	return settings, nil
+}
+
+func initialSettingsForInstall(path string, autoDetect bool) (config.Settings, *detect.Candidate, error) {
+	if _, err := os.Stat(path); err == nil {
+		settings, err := loadEffectiveSettings(path)
+		return settings, nil, err
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return config.Settings{}, nil, fmt.Errorf("inspect config %s: %w", path, err)
+	}
+
+	settings := config.Default()
+	environment, err := config.FromEnvironment()
+	if err != nil {
+		return config.Settings{}, nil, err
+	}
+	settings.Apply(environment)
+
+	var detected *detect.Candidate
+	if autoDetect && strings.TrimSpace(os.Getenv("NETFERRY_UPSTREAM")) == "" {
+		candidates := detect.Detect(context.Background(), 500*time.Millisecond)
+		for index := range candidates {
+			if candidates[index].Upstream != "" {
+				settings.Upstream = candidates[index].Upstream
+				detected = &candidates[index]
+				break
+			}
+		}
+	}
+	if err := settings.Validate(); err != nil {
+		return config.Settings{}, nil, err
+	}
+	return settings, detected, nil
+}
+
+func printDetectedProxy(candidate *detect.Candidate) {
+	if candidate == nil {
+		return
+	}
+	fmt.Printf("detected upstream: %s (%s)\n", candidate.Upstream, candidate.Software)
 }
 
 func runUninstall(args []string) int {
@@ -975,8 +1062,9 @@ func printUsage() {
 	fmt.Fprintln(out, "  netferry env     [flags]")
 	fmt.Fprintln(out, "  netferry status  [flags]")
 	fmt.Fprintln(out, "  netferry config  <path|show|init> [flags]")
-	fmt.Fprintln(out, "  netferry setup   [--dry-run] [--no-service] [--no-env]")
-	fmt.Fprintln(out, "  netferry install [flags]")
+	fmt.Fprintln(out, "  netferry detect  [--json] [--timeout duration]")
+	fmt.Fprintln(out, "  netferry setup   [--dry-run] [--no-service] [--no-env] [--no-detect]")
+	fmt.Fprintln(out, "  netferry install [--dry-run] [--no-detect]")
 	fmt.Fprintln(out, "  netferry uninstall [--dry-run] [--keep-env]")
 	fmt.Fprintln(out, "  netferry service <start|stop|status> [--dry-run]")
 	fmt.Fprintln(out, "  netferry version")
