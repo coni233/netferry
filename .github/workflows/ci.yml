@@ -9,15 +9,30 @@ permissions:
 
 jobs:
   test:
+    name: test (${{ matrix.name }})
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - name: linux-go1.22
+            os: ubuntu-latest
+            go-version: "1.22.x"
+          - name: linux-stable
+            os: ubuntu-latest
+            go-version: "stable"
+          - name: windows-stable
+            os: windows-latest
+            go-version: "stable"
+          - name: macos-stable
+            os: macos-latest
+            go-version: "stable"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
-          go-version: "1.22.x"
-          cache: true
+          go-version: ${{ matrix.go-version }}
+          cache: false
+      - run: go vet ./...
       - run: go test ./...
-      - run: go build ./cmd/netferry
+      - run: go build -trimpath ./cmd/netferry
