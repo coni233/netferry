@@ -56,9 +56,12 @@ go build -o bin/netferry.exe ./cmd/netferry
 安装本地网关，并配置为用户登录后自动启动：
 
 ```powershell
-.\bin\netferry.exe install --dry-run
-.\bin\netferry.exe install
+.\bin\netferry.exe setup --dry-run
+.\bin\netferry.exe setup
 ```
+
+`setup` 会同时安装自动启动服务和用户级代理环境。安装后需要重启 Agent
+应用，让新进程继承环境变量。使用 `--no-service` 或 `--no-env` 可以只安装其中一部分。
 
 使用 `status` 查看代理和后台服务状态：
 
@@ -112,7 +115,9 @@ netferry doctor   测试直连和上游代理路径
 netferry env      输出 Shell 环境变量配置
 netferry status   查看代理和后台服务状态
 netferry config   查看、显示或初始化配置
+netferry setup    安装自动启动和代理环境
 netferry install  安装用户级自动启动
+netferry uninstall 删除自动启动并恢复受管理的环境变量
 netferry service  启动、停止或检查后台服务
 netferry version  输出当前版本
 ```

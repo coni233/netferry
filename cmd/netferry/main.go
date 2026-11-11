@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/coni233/netferry/internal/agentenv"
 	"github.com/coni233/netferry/internal/config"
 	"github.com/coni233/netferry/internal/proxy"
 	"github.com/coni233/netferry/internal/router"
@@ -57,6 +58,8 @@ func runCLI(args []string) int {
 		return runStatus(args[1:])
 	case "config":
 		return runConfig(args[1:])
+	case "setup":
+		return runSetup(args[1:])
 	case "install":
 		return runInstall(args[1:])
 	case "uninstall":
@@ -403,27 +406,40 @@ func runStatus(args []string) int {
 			Detail:  serviceErr.Error(),
 		}
 	}
+	environmentStatus, environmentErr := agentenv.CurrentStatus()
+	if environmentErr != nil {
+		environmentStatus = agentenv.Status{
+			Manager: agentenv.ManagerName(),
+			Detail:  environmentErr.Error(),
+		}
+	}
 
 	status := struct {
-		Running          bool   `json:"running"`
-		Detail           string `json:"detail,omitempty"`
-		Listen           string `json:"listen"`
-		ProxyURL         string `json:"proxy_url"`
-		Upstream         string `json:"upstream"`
-		ConfigPath       string `json:"config_path"`
-		ServiceManager   string `json:"service_manager"`
-		ServiceInstalled bool   `json:"service_installed"`
-		ServiceDetail    string `json:"service_detail,omitempty"`
+		Running              bool   `json:"running"`
+		Detail               string `json:"detail,omitempty"`
+		Listen               string `json:"listen"`
+		ProxyURL             string `json:"proxy_url"`
+		Upstream             string `json:"upstream"`
+		ConfigPath           string `json:"config_path"`
+		ServiceManager       string `json:"service_manager"`
+		ServiceInstalled     bool   `json:"service_installed"`
+		ServiceDetail        string `json:"service_detail,omitempty"`
+		EnvironmentManager   string `json:"environment_manager"`
+		EnvironmentInstalled bool   `json:"environment_installed"`
+		EnvironmentDetail    string `json:"environment_detail,omitempty"`
 	}{
-		Running:          running,
-		Detail:           detail,
-		Listen:           settings.Listen,
-		ProxyURL:         proxyURL(settings.Listen),
-		Upstream:         redactProxyURL(settings.Upstream),
-		ConfigPath:       configPath,
-		ServiceManager:   serviceStatus.Manager,
-		ServiceInstalled: serviceStatus.Installed,
-		ServiceDetail:    serviceStatus.Detail,
+		Running:              running,
+		Detail:               detail,
+		Listen:               settings.Listen,
+		ProxyURL:             proxyURL(settings.Listen),
+		Upstream:             redactProxyURL(settings.Upstream),
+		ConfigPath:           configPath,
+		ServiceManager:       serviceStatus.Manager,
+		ServiceInstalled:     serviceStatus.Installed,
+		ServiceDetail:        serviceStatus.Detail,
+		EnvironmentManager:   environmentStatus.Manager,
+		EnvironmentInstalled: environmentStatus.Installed,
+		EnvironmentDetail:    environmentStatus.Detail,
 	}
 
 	if *jsonOutput {
@@ -444,6 +460,7 @@ func runStatus(args []string) int {
 		fmt.Printf("upstream:  %s\n", status.Upstream)
 		fmt.Printf("config:    %s\n", status.ConfigPath)
 		fmt.Printf("service:   %s (%s)\n", status.ServiceManager, installedText(status.ServiceInstalled))
+		fmt.Printf("environment: %s (%s)\n", status.EnvironmentManager, installedText(status.EnvironmentInstalled))
 		if status.Detail != "" && !running {
 			fmt.Printf("detail:    %s\n", status.Detail)
 		}
@@ -524,20 +541,8 @@ func runInstall(args []string) int {
 		return 1
 	}
 
-	settings := config.Default()
-	fileSettings, err := config.LoadOptional(configPath)
+	settings, err := loadEffectiveSettings(configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
-		return 1
-	}
-	settings.Apply(fileSettings)
-	environment, err := config.FromEnvironment()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
-		return 1
-	}
-	settings.Apply(environment)
-	if err := settings.Validate(); err != nil {
 		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
 		return 1
 	}
@@ -566,12 +571,98 @@ func runInstall(args []string) int {
 	return 0
 }
 
+func runSetup(args []string) int {
+	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	configFlag := fs.String("config", "", "configuration file path")
+	dryRun := fs.Bool("dry-run", false, "show actions without changing the system")
+	noService := fs.Bool("no-service", false, "do not install automatic startup")
+	noEnvironment := fs.Bool("no-env", false, "do not install proxy environment variables")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	configPath, err := resolveConfigPath(*configFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+		return 1
+	}
+	settings, err := loadEffectiveSettings(configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+		return 1
+	}
+
+	if !*dryRun {
+		if err := config.WriteNew(configPath, settings); err != nil && !errors.Is(err, config.ErrAlreadyExists) {
+			fmt.Fprintf(os.Stderr, "netferry: create config: %v\n", err)
+			return 1
+		}
+	}
+
+	fmt.Printf("configuration: %s\n", configPath)
+	if !*noService {
+		executable, err := os.Executable()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "netferry: find executable: %v\n", err)
+			return 1
+		}
+		messages, err := service.Install(service.Spec{
+			Executable: executable,
+			ConfigPath: configPath,
+		}, *dryRun)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+			return 1
+		}
+		printServiceMessages(service.ManagerName(), messages, *dryRun)
+	}
+	if !*noEnvironment {
+		messages, err := agentenv.Install(settings.Listen, *dryRun)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+			return 1
+		}
+		printServiceMessages(agentenv.ManagerName(), messages, *dryRun)
+	}
+	return 0
+}
+
+func loadEffectiveSettings(path string) (config.Settings, error) {
+	settings := config.Default()
+	fileSettings, err := config.LoadOptional(path)
+	if err != nil {
+		return config.Settings{}, err
+	}
+	settings.Apply(fileSettings)
+	environment, err := config.FromEnvironment()
+	if err != nil {
+		return config.Settings{}, err
+	}
+	settings.Apply(environment)
+	if err := settings.Validate(); err != nil {
+		return config.Settings{}, err
+	}
+	return settings, nil
+}
+
 func runUninstall(args []string) int {
 	fs := flag.NewFlagSet("uninstall", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	dryRun := fs.Bool("dry-run", false, "show actions without changing the system")
+	keepEnvironment := fs.Bool("keep-env", false, "keep installed proxy environment variables")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+
+	if !*keepEnvironment {
+		messages, err := agentenv.Uninstall(*dryRun)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+			return 1
+		}
+		printServiceMessages(agentenv.ManagerName(), messages, *dryRun)
 	}
 
 	messages, err := service.Uninstall(*dryRun)
@@ -884,8 +975,9 @@ func printUsage() {
 	fmt.Fprintln(out, "  netferry env     [flags]")
 	fmt.Fprintln(out, "  netferry status  [flags]")
 	fmt.Fprintln(out, "  netferry config  <path|show|init> [flags]")
+	fmt.Fprintln(out, "  netferry setup   [--dry-run] [--no-service] [--no-env]")
 	fmt.Fprintln(out, "  netferry install [flags]")
-	fmt.Fprintln(out, "  netferry uninstall [--dry-run]")
+	fmt.Fprintln(out, "  netferry uninstall [--dry-run] [--keep-env]")
 	fmt.Fprintln(out, "  netferry service <start|stop|status> [--dry-run]")
 	fmt.Fprintln(out, "  netferry version")
 	fmt.Fprintln(out)

@@ -54,8 +54,18 @@ NetFerry starts at user login rather than installing a machine-wide daemon:
 - Linux uses a systemd user service.
 
 The executable is launched with `serve --config <path>`. Installation also
-creates the configuration file if it does not exist. `install --dry-run` prints
-the intended actions without changing the system.
+creates the configuration file if it does not exist. `install --dry-run` and
+`setup --dry-run` print the intended actions without changing the system.
+
+`setup` additionally installs the standard proxy environment:
+
+- Windows writes persistent values under the current user environment.
+- macOS updates the current launchd session and installs a login LaunchAgent.
+- Linux writes a dedicated `environment.d` file.
+
+The installer records previous environment values when the platform supports
+overwriting existing variables. `uninstall` only restores variables that still
+match the values managed by NetFerry, so later user changes are preserved.
 
 ## Safety invariants
 

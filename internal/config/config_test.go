@@ -74,3 +74,11 @@ func TestMissingConfigUsesDefaults(t *testing.T) {
 		t.Fatalf("settings = %#v, want defaults", settings)
 	}
 }
+
+func TestValidateRejectsUnsupportedUpstream(t *testing.T) {
+	settings := Default()
+	settings.Upstream = "ftp://127.0.0.1:10808"
+	if err := settings.Validate(); err == nil {
+		t.Fatal("expected unsupported upstream error")
+	}
+}

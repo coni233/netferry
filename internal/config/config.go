@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -143,8 +145,23 @@ func (settings Settings) Validate() error {
 	if strings.TrimSpace(settings.Listen) == "" {
 		return errors.New("listen address cannot be empty")
 	}
+	if _, _, err := net.SplitHostPort(settings.Listen); err != nil {
+		return fmt.Errorf("invalid listen address %q: %w", settings.Listen, err)
+	}
 	if strings.TrimSpace(settings.Upstream) == "" {
 		return errors.New("upstream proxy cannot be empty")
+	}
+	parsed, err := url.Parse(settings.Upstream)
+	if err != nil {
+		return fmt.Errorf("invalid upstream proxy: %w", err)
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "http", "socks5", "socks5h":
+	default:
+		return fmt.Errorf("unsupported upstream proxy scheme %q", parsed.Scheme)
+	}
+	if parsed.Host == "" {
+		return errors.New("upstream proxy must include a host")
 	}
 	if settings.ProbeTimeout <= 0 {
 		return errors.New("probe timeout must be greater than zero")

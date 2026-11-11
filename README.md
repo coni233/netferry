@@ -62,9 +62,13 @@ Check both routes for GitHub:
 Install the local gateway and configure it to start after user login:
 
 ```powershell
-.\bin\netferry.exe install --dry-run
-.\bin\netferry.exe install
+.\bin\netferry.exe setup --dry-run
+.\bin\netferry.exe setup
 ```
+
+`setup` installs both the automatic startup service and the user-level proxy
+environment. Restart Agent applications afterward so they inherit the new
+variables. Use `--no-service` or `--no-env` to install only one part.
 
 Use `status` to inspect the proxy and service:
 
@@ -120,7 +124,9 @@ netferry doctor   Test direct and upstream routes
 netferry env      Print shell environment setup
 netferry status   Show proxy and service status
 netferry config   Locate, show, or initialize configuration
+netferry setup    Install automatic startup and proxy environment
 netferry install  Install user-level automatic startup
+netferry uninstall Remove startup and managed environment
 netferry service  Start, stop, or inspect the startup service
 netferry version  Print the version
 ```
