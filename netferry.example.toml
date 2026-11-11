@@ -1,0 +1,11 @@
+# Local HTTP proxy used by Codex, Claude Code, DeepSeek harness, and other tools.
+listen = "127.0.0.1:17890"
+
+# Upstream proxy. Use socks5h:// or http://.
+upstream = "socks5h://127.0.0.1:10808"
+
+# How long a direct connectivity probe may take before falling back.
+probe_timeout = "1500ms"
+
+# How long a successful direct or proxy route remains cached.
+cache_ttl = "5m"

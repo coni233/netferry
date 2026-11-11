@@ -26,10 +26,12 @@ NetFerry 目前处于早期开发阶段。当前 MVP 提供以下能力：
 - 优先直连，并在失败时自动回退代理
 - 支持 SOCKS5 和 HTTP 上游代理
 - 按目标主机缓存路由结果
-- 提供 `doctor`、`env` 和通用命令启动能力
+- 提供 `doctor`、`status`、`env` 和通用命令启动能力
+- 持久化 TOML 配置
+- 支持 Windows、macOS 和 Linux 用户级自动启动
 - 不依赖 Agent SDK、MCP 服务或特定模型的 Hook
 
-非 CONNECT 的普通 HTTP 转发、长期运行的用户服务、SSH `ProxyCommand` 以及操作系统级透明重定向已经列入后续路线。
+非 CONNECT 的普通 HTTP 转发、SSH `ProxyCommand` 以及操作系统级透明重定向已经列入后续路线。
 
 ## 构建
 
@@ -49,6 +51,20 @@ go build -o bin/netferry.exe ./cmd/netferry
 
 ```powershell
 .\bin\netferry.exe doctor github.com api.github.com codeload.github.com
+```
+
+安装本地网关，并配置为用户登录后自动启动：
+
+```powershell
+.\bin\netferry.exe install --dry-run
+.\bin\netferry.exe install
+```
+
+使用 `status` 查看代理和后台服务状态：
+
+```powershell
+.\bin\netferry.exe status
+.\bin\netferry.exe status --json
 ```
 
 通过临时网关启动任意编程 Agent：
@@ -94,6 +110,10 @@ netferry serve    启动本地自适应代理
 netferry run      在代理环境中运行任意命令
 netferry doctor   测试直连和上游代理路径
 netferry env      输出 Shell 环境变量配置
+netferry status   查看代理和后台服务状态
+netferry config   查看、显示或初始化配置
+netferry install  安装用户级自动启动
+netferry service  启动、停止或检查后台服务
 netferry version  输出当前版本
 ```
 
@@ -114,6 +134,11 @@ NETFERRY_UPSTREAM
 NETFERRY_PROBE_TIMEOUT
 NETFERRY_CACHE_TTL
 ```
+
+配置文件保存在当前平台的用户配置目录。可以使用 `netferry config path`
+查看路径、使用 `netferry config init` 创建配置，或者复制
+`netferry.example.toml`。配置优先级依次为：命令行参数、环境变量、配置文件、
+内置默认值。
 
 ## 安全性
 

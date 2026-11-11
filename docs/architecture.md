@@ -37,10 +37,25 @@ it is not part of the network data path.
 
 ```text
 cmd/netferry        CLI entry point
+internal/config     flat TOML configuration and precedence
 internal/router     direct/proxy route selection and cache
+internal/service    Windows task, macOS LaunchAgent, systemd user service
 internal/upstream   HTTP CONNECT and SOCKS5 upstream dialers
 internal/proxy      loopback HTTP CONNECT server
 ```
+
+## Startup integration
+
+NetFerry starts at user login rather than installing a machine-wide daemon:
+
+- Windows uses a current-user Task Scheduler entry and a hidden PowerShell
+  wrapper.
+- macOS uses a per-user LaunchAgent.
+- Linux uses a systemd user service.
+
+The executable is launched with `serve --config <path>`. Installation also
+creates the configuration file if it does not exist. `install --dry-run` prints
+the intended actions without changing the system.
 
 ## Safety invariants
 

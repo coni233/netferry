@@ -30,11 +30,13 @@ NetFerry is in early development. The current MVP provides:
 - Direct-first routing with automatic proxy fallback
 - SOCKS5 and HTTP upstream proxies
 - Per-host route caching
-- `doctor`, `env`, and generic command-launch commands
+- `doctor`, `status`, `env`, and generic command-launch commands
+- Persistent TOML configuration
+- User-level automatic startup on Windows, macOS, and Linux
 - No dependency on an Agent SDK, MCP server, or model-specific hook
 
-HTTP proxying for non-CONNECT requests, a long-running user service, SSH
-`ProxyCommand`, and transparent OS-level redirection are on the roadmap.
+HTTP proxying for non-CONNECT requests, SSH `ProxyCommand`, and transparent
+OS-level redirection are on the roadmap.
 
 ## Build
 
@@ -55,6 +57,20 @@ Check both routes for GitHub:
 
 ```powershell
 .\bin\netferry.exe doctor github.com api.github.com codeload.github.com
+```
+
+Install the local gateway and configure it to start after user login:
+
+```powershell
+.\bin\netferry.exe install --dry-run
+.\bin\netferry.exe install
+```
+
+Use `status` to inspect the proxy and service:
+
+```powershell
+.\bin\netferry.exe status
+.\bin\netferry.exe status --json
 ```
 
 Launch any coding agent through a temporary gateway:
@@ -102,6 +118,10 @@ netferry serve    Run the local adaptive proxy
 netferry run      Run any command with the local proxy environment
 netferry doctor   Test direct and upstream routes
 netferry env      Print shell environment setup
+netferry status   Show proxy and service status
+netferry config   Locate, show, or initialize configuration
+netferry install  Install user-level automatic startup
+netferry service  Start, stop, or inspect the startup service
 netferry version  Print the version
 ```
 
@@ -116,6 +136,11 @@ cache:    5m
 
 Configuration can also be provided through `NETFERRY_LISTEN`,
 `NETFERRY_UPSTREAM`, `NETFERRY_PROBE_TIMEOUT`, and `NETFERRY_CACHE_TTL`.
+
+The configuration file is stored in the platform user configuration directory.
+Use `netferry config path` to locate it, `netferry config init` to create it, or
+copy `netferry.example.toml`. Precedence is command-line flags, environment
+variables, configuration file, then built-in defaults.
 
 ## Security
 

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -17,16 +18,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/coni233/netferry/internal/config"
 	"github.com/coni233/netferry/internal/proxy"
 	"github.com/coni233/netferry/internal/router"
+	"github.com/coni233/netferry/internal/service"
 	"github.com/coni233/netferry/internal/upstream"
 )
 
 const (
-	defaultListen       = "127.0.0.1:17890"
-	defaultUpstream     = "socks5h://127.0.0.1:10808"
-	defaultProbeTimeout = 1500 * time.Millisecond
-	defaultCacheTTL     = 5 * time.Minute
+	defaultListen       = config.DefaultListen
+	defaultUpstream     = config.DefaultUpstream
+	defaultProbeTimeout = config.DefaultProbeTimeout
+	defaultCacheTTL     = config.DefaultCacheTTL
 )
 
 var version = "dev"
@@ -50,6 +53,16 @@ func runCLI(args []string) int {
 		return runDoctor(args[1:])
 	case "env":
 		return runEnv(args[1:])
+	case "status":
+		return runStatus(args[1:])
+	case "config":
+		return runConfig(args[1:])
+	case "install":
+		return runInstall(args[1:])
+	case "uninstall":
+		return runUninstall(args[1:])
+	case "service":
+		return runService(args[1:])
 	case "version", "--version", "-version":
 		fmt.Println(version)
 		return 0
@@ -67,29 +80,36 @@ func runServe(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
-	listen := fs.String("listen", envOrDefault("NETFERRY_LISTEN", defaultListen), "HTTP proxy listen address")
-	upstreamURL := fs.String("upstream", envOrDefault("NETFERRY_UPSTREAM", defaultUpstream), "upstream proxy URL")
-	probeTimeout := fs.Duration("probe-timeout", envDuration("NETFERRY_PROBE_TIMEOUT", defaultProbeTimeout), "direct connectivity probe timeout")
-	cacheTTL := fs.Duration("cache-ttl", envDuration("NETFERRY_CACHE_TTL", defaultCacheTTL), "route cache lifetime")
+	settingsFlags := addSettingsFlags(fs)
 
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	settings, configPath, err := resolveSettings(fs, settingsFlags)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+		return 1
+	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	handler, err := newProxyHandler(*listen, *upstreamURL, *probeTimeout, *cacheTTL, logger)
+	handler, err := newProxyHandler(settings.Listen, settings.Upstream, settings.ProbeTimeout, settings.CacheTTL, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
 		return 1
 	}
 
 	server := &http.Server{
-		Addr:              *listen,
+		Addr:              settings.Listen,
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	logger.Info("netferry listening", "address", *listen, "upstream", redactProxyURL(*upstreamURL))
+	logger.Info(
+		"netferry listening",
+		"address", settings.Listen,
+		"upstream", redactProxyURL(settings.Upstream),
+		"config", configPath,
+	)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
 		return 1
@@ -101,13 +121,15 @@ func runCommand(args []string) int {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
-	listen := fs.String("listen", envOrDefault("NETFERRY_LISTEN", defaultListen), "HTTP proxy listen address")
-	upstreamURL := fs.String("upstream", envOrDefault("NETFERRY_UPSTREAM", defaultUpstream), "upstream proxy URL")
-	probeTimeout := fs.Duration("probe-timeout", envDuration("NETFERRY_PROBE_TIMEOUT", defaultProbeTimeout), "direct connectivity probe timeout")
-	cacheTTL := fs.Duration("cache-ttl", envDuration("NETFERRY_CACHE_TTL", defaultCacheTTL), "route cache lifetime")
+	settingsFlags := addSettingsFlags(fs)
 
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	settings, _, err := resolveSettings(fs, settingsFlags)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+		return 1
 	}
 
 	command := fs.Args()
@@ -120,7 +142,7 @@ func runCommand(args []string) int {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	stop, err := ensureServer(*listen, *upstreamURL, *probeTimeout, *cacheTTL, logger)
+	stop, err := ensureServer(settings, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
 		return 1
@@ -131,7 +153,7 @@ func runCommand(args []string) int {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Env = proxyEnvironment(os.Environ(), proxyURL(*listen))
+	cmd.Env = proxyEnvironment(os.Environ(), proxyURL(settings.Listen))
 
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
@@ -148,11 +170,19 @@ func runDoctor(args []string) int {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
-	upstreamURL := fs.String("upstream", envOrDefault("NETFERRY_UPSTREAM", defaultUpstream), "upstream proxy URL")
-	timeout := fs.Duration("timeout", envDuration("NETFERRY_PROBE_TIMEOUT", defaultProbeTimeout), "probe timeout")
+	settingsFlags := addSettingsFlags(fs)
+	timeout := fs.Duration("timeout", 0, "override probe timeout")
 
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	settings, _, err := resolveSettings(fs, settingsFlags)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+		return 1
+	}
+	if *timeout > 0 {
+		settings.ProbeTimeout = *timeout
 	}
 
 	hosts := fs.Args()
@@ -165,16 +195,16 @@ func runDoctor(args []string) int {
 		}
 	}
 
-	upstreamDialer, err := upstream.New(*upstreamURL)
+	upstreamDialer, err := upstream.New(settings.Upstream)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "netferry: invalid upstream: %v\n", err)
 		return 1
 	}
 
-	directProbe := router.NewDirectProbe(*timeout)
+	directProbe := router.NewDirectProbe(settings.ProbeTimeout)
 	failed := false
 
-	fmt.Printf("upstream: %s\n\n", redactProxyURL(*upstreamURL))
+	fmt.Printf("upstream: %s\n\n", redactProxyURL(settings.Upstream))
 	for _, input := range hosts {
 		address, err := normalizeAddress(input)
 		if err != nil {
@@ -183,11 +213,11 @@ func runDoctor(args []string) int {
 			continue
 		}
 
-		directCtx, cancelDirect := context.WithTimeout(context.Background(), *timeout)
+		directCtx, cancelDirect := context.WithTimeout(context.Background(), settings.ProbeTimeout)
 		directDuration, directErr := directProbe(directCtx, address)
 		cancelDirect()
 
-		proxyCtx, cancelProxy := context.WithTimeout(context.Background(), *timeout)
+		proxyCtx, cancelProxy := context.WithTimeout(context.Background(), settings.ProbeTimeout)
 		proxyStart := time.Now()
 		proxyConn, proxyErr := upstreamDialer.DialContext(proxyCtx, "tcp", address)
 		proxyDuration := time.Since(proxyStart)
@@ -230,14 +260,19 @@ func runEnv(args []string) int {
 	fs := flag.NewFlagSet("env", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
-	listen := fs.String("listen", envOrDefault("NETFERRY_LISTEN", defaultListen), "HTTP proxy listen address")
+	settingsFlags := addSettingsFlags(fs)
 	shell := fs.String("shell", defaultShell(), "output shell: powershell or bash")
 
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	settings, _, err := resolveSettings(fs, settingsFlags)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+		return 1
+	}
 
-	value := proxyURL(*listen)
+	value := proxyURL(settings.Listen)
 	switch strings.ToLower(*shell) {
 	case "powershell", "pwsh":
 		fmt.Printf("$env:HTTP_PROXY = '%s'\n", value)
@@ -262,6 +297,359 @@ func runEnv(args []string) int {
 		return 2
 	}
 	return 0
+}
+
+type settingsFlags struct {
+	config       *string
+	listen       *string
+	upstream     *string
+	probeTimeout *time.Duration
+	cacheTTL     *time.Duration
+}
+
+func addSettingsFlags(fs *flag.FlagSet) *settingsFlags {
+	return &settingsFlags{
+		config:       fs.String("config", "", "configuration file path"),
+		listen:       fs.String("listen", "", "HTTP proxy listen address"),
+		upstream:     fs.String("upstream", "", "upstream proxy URL"),
+		probeTimeout: fs.Duration("probe-timeout", 0, "direct connectivity probe timeout"),
+		cacheTTL:     fs.Duration("cache-ttl", 0, "route cache lifetime"),
+	}
+}
+
+func resolveSettings(fs *flag.FlagSet, flags *settingsFlags) (config.Settings, string, error) {
+	path, err := resolveConfigPath(*flags.config)
+	if err != nil {
+		return config.Settings{}, "", err
+	}
+
+	settings := config.Default()
+	fileSettings, err := config.LoadOptional(path)
+	if err != nil {
+		return config.Settings{}, "", err
+	}
+	settings.Apply(fileSettings)
+
+	environment, err := config.FromEnvironment()
+	if err != nil {
+		return config.Settings{}, "", err
+	}
+	settings.Apply(environment)
+
+	explicit := make(map[string]bool)
+	fs.Visit(func(item *flag.Flag) {
+		explicit[item.Name] = true
+	})
+	var commandLine config.Overrides
+	if explicit["listen"] {
+		commandLine.Listen = flags.listen
+	}
+	if explicit["upstream"] {
+		commandLine.Upstream = flags.upstream
+	}
+	if explicit["probe-timeout"] {
+		commandLine.ProbeTimeout = flags.probeTimeout
+	}
+	if explicit["cache-ttl"] {
+		commandLine.CacheTTL = flags.cacheTTL
+	}
+	settings.Apply(commandLine)
+
+	if err := settings.Validate(); err != nil {
+		return config.Settings{}, "", err
+	}
+	return settings, path, nil
+}
+
+func resolveConfigPath(explicit string) (string, error) {
+	path := strings.TrimSpace(explicit)
+	if path == "" {
+		path = strings.TrimSpace(os.Getenv("NETFERRY_CONFIG"))
+	}
+	if path == "" {
+		defaultPath, err := config.DefaultPath()
+		if err != nil {
+			return "", err
+		}
+		return defaultPath, nil
+	}
+	return path, nil
+}
+
+func runStatus(args []string) int {
+	fs := flag.NewFlagSet("status", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	settingsFlags := addSettingsFlags(fs)
+	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
+
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	settings, configPath, err := resolveSettings(fs, settingsFlags)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+		return 1
+	}
+
+	running, detail, err := netFerryListeningDetail(settings.Listen)
+	if err != nil {
+		detail = err.Error()
+	}
+	serviceStatus, serviceErr := service.CurrentStatus()
+	if serviceErr != nil {
+		serviceStatus = service.Status{
+			Manager: service.ManagerName(),
+			Detail:  serviceErr.Error(),
+		}
+	}
+
+	status := struct {
+		Running          bool   `json:"running"`
+		Detail           string `json:"detail,omitempty"`
+		Listen           string `json:"listen"`
+		ProxyURL         string `json:"proxy_url"`
+		Upstream         string `json:"upstream"`
+		ConfigPath       string `json:"config_path"`
+		ServiceManager   string `json:"service_manager"`
+		ServiceInstalled bool   `json:"service_installed"`
+		ServiceDetail    string `json:"service_detail,omitempty"`
+	}{
+		Running:          running,
+		Detail:           detail,
+		Listen:           settings.Listen,
+		ProxyURL:         proxyURL(settings.Listen),
+		Upstream:         redactProxyURL(settings.Upstream),
+		ConfigPath:       configPath,
+		ServiceManager:   serviceStatus.Manager,
+		ServiceInstalled: serviceStatus.Installed,
+		ServiceDetail:    serviceStatus.Detail,
+	}
+
+	if *jsonOutput {
+		encoded, err := json.MarshalIndent(status, "", "  ")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+			return 1
+		}
+		fmt.Println(string(encoded))
+	} else {
+		if running {
+			fmt.Println("status:    running")
+		} else {
+			fmt.Println("status:    stopped")
+		}
+		fmt.Printf("listen:    %s\n", status.Listen)
+		fmt.Printf("proxy:     %s\n", status.ProxyURL)
+		fmt.Printf("upstream:  %s\n", status.Upstream)
+		fmt.Printf("config:    %s\n", status.ConfigPath)
+		fmt.Printf("service:   %s (%s)\n", status.ServiceManager, installedText(status.ServiceInstalled))
+		if status.Detail != "" && !running {
+			fmt.Printf("detail:    %s\n", status.Detail)
+		}
+	}
+
+	if !running {
+		return 1
+	}
+	return 0
+}
+
+func runConfig(args []string) int {
+	action := "show"
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		action = args[0]
+		args = args[1:]
+	}
+
+	fs := flag.NewFlagSet("config", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	settingsFlags := addSettingsFlags(fs)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	switch action {
+	case "path":
+		path, err := resolveConfigPath(*settingsFlags.config)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+			return 1
+		}
+		fmt.Println(path)
+		return 0
+	case "show":
+		settings, path, err := resolveSettings(fs, settingsFlags)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+			return 1
+		}
+		fmt.Printf("# %s\n%s\n", path, config.Format(settings))
+		return 0
+	case "init":
+		settings, path, err := resolveSettings(fs, settingsFlags)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+			return 1
+		}
+		if err := config.WriteNew(path, settings); err != nil {
+			if errors.Is(err, config.ErrAlreadyExists) {
+				fmt.Printf("config already exists: %s\n", path)
+				return 1
+			}
+			fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+			return 1
+		}
+		fmt.Printf("created config: %s\n", path)
+		return 0
+	default:
+		fmt.Fprintf(os.Stderr, "unknown config command %q; use path, show, or init\n", action)
+		return 2
+	}
+}
+
+func runInstall(args []string) int {
+	fs := flag.NewFlagSet("install", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	configFlag := fs.String("config", "", "configuration file path")
+	dryRun := fs.Bool("dry-run", false, "show actions without changing the system")
+
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	configPath, err := resolveConfigPath(*configFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+		return 1
+	}
+
+	settings := config.Default()
+	fileSettings, err := config.LoadOptional(configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+		return 1
+	}
+	settings.Apply(fileSettings)
+	environment, err := config.FromEnvironment()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+		return 1
+	}
+	settings.Apply(environment)
+	if err := settings.Validate(); err != nil {
+		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+		return 1
+	}
+
+	if !*dryRun {
+		if err := config.WriteNew(configPath, settings); err != nil && !errors.Is(err, config.ErrAlreadyExists) {
+			fmt.Fprintf(os.Stderr, "netferry: create config: %v\n", err)
+			return 1
+		}
+	}
+
+	executable, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "netferry: find executable: %v\n", err)
+		return 1
+	}
+	messages, err := service.Install(service.Spec{
+		Executable: executable,
+		ConfigPath: configPath,
+	}, *dryRun)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+		return 1
+	}
+	printServiceMessages(service.ManagerName(), messages, *dryRun)
+	return 0
+}
+
+func runUninstall(args []string) int {
+	fs := flag.NewFlagSet("uninstall", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	dryRun := fs.Bool("dry-run", false, "show actions without changing the system")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	messages, err := service.Uninstall(*dryRun)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+		return 1
+	}
+	printServiceMessages(service.ManagerName(), messages, *dryRun)
+	return 0
+}
+
+func runService(args []string) int {
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: netferry service <start|stop|status> [--dry-run]")
+		return 2
+	}
+	action := args[0]
+	fs := flag.NewFlagSet("service "+action, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	dryRun := fs.Bool("dry-run", false, "show actions without changing the system")
+	if err := fs.Parse(args[1:]); err != nil {
+		return 2
+	}
+
+	switch action {
+	case "start":
+		messages, err := service.Start(*dryRun)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+			return 1
+		}
+		printServiceMessages(service.ManagerName(), messages, *dryRun)
+		return 0
+	case "stop":
+		messages, err := service.Stop(*dryRun)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+			return 1
+		}
+		printServiceMessages(service.ManagerName(), messages, *dryRun)
+		return 0
+	case "status":
+		status, err := service.CurrentStatus()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+			return 1
+		}
+		fmt.Printf("manager:   %s\n", status.Manager)
+		fmt.Printf("installed: %s\n", installedText(status.Installed))
+		if status.Detail != "" {
+			fmt.Printf("detail:    %s\n", status.Detail)
+		}
+		if !status.Installed {
+			return 1
+		}
+		return 0
+	default:
+		fmt.Fprintf(os.Stderr, "unknown service command %q; use start, stop, or status\n", action)
+		return 2
+	}
+}
+
+func printServiceMessages(manager string, messages []string, dryRun bool) {
+	if dryRun {
+		fmt.Printf("%s dry run:\n", manager)
+	} else {
+		fmt.Printf("%s:\n", manager)
+	}
+	for _, message := range messages {
+		fmt.Printf("  - %s\n", message)
+	}
+}
+
+func installedText(installed bool) string {
+	if installed {
+		return "installed"
+	}
+	return "not installed"
 }
 
 func newProxyHandler(listen, upstreamURL string, probeTimeout, cacheTTL time.Duration, logger *slog.Logger) (http.Handler, error) {
@@ -289,8 +677,8 @@ func newProxyHandler(listen, upstreamURL string, probeTimeout, cacheTTL time.Dur
 	}, nil
 }
 
-func ensureServer(listen, upstreamURL string, probeTimeout, cacheTTL time.Duration, logger *slog.Logger) (func(), error) {
-	running, err := netFerryListening(listen)
+func ensureServer(settings config.Settings, logger *slog.Logger) (func(), error) {
+	running, _, err := netFerryListeningDetail(settings.Listen)
 	if err == nil && running {
 		return func() {}, nil
 	}
@@ -298,12 +686,12 @@ func ensureServer(listen, upstreamURL string, probeTimeout, cacheTTL time.Durati
 		return nil, err
 	}
 
-	handler, err := newProxyHandler(listen, upstreamURL, probeTimeout, cacheTTL, logger)
+	handler, err := newProxyHandler(settings.Listen, settings.Upstream, settings.ProbeTimeout, settings.CacheTTL, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	listener, err := net.Listen("tcp", listen)
+	listener, err := net.Listen("tcp", settings.Listen)
 	if err != nil {
 		return nil, fmt.Errorf("start local gateway: %w", err)
 	}
@@ -325,27 +713,27 @@ func ensureServer(listen, upstreamURL string, probeTimeout, cacheTTL time.Durati
 	}, nil
 }
 
-func netFerryListening(address string) (bool, error) {
+func netFerryListeningDetail(address string) (bool, string, error) {
 	conn, err := net.DialTimeout("tcp", address, 200*time.Millisecond)
 	if err == nil {
 		defer conn.Close()
 		_ = conn.SetDeadline(time.Now().Add(time.Second))
 		if _, err := io.WriteString(conn, "GET /__netferry/health HTTP/1.1\r\nHost: netferry.local\r\nConnection: close\r\n\r\n"); err != nil {
-			return false, err
+			return false, "", err
 		}
 		body, err := io.ReadAll(io.LimitReader(conn, 4096))
 		if err != nil {
-			return false, err
+			return false, "", err
 		}
 		if strings.Contains(string(body), "netferry ok") {
-			return true, nil
+			return true, "health check succeeded", nil
 		}
-		return false, fmt.Errorf("address %s is already used by another service", address)
+		return false, "", fmt.Errorf("address %s is already used by another service", address)
 	}
 	if isConnectionRefused(err) {
-		return false, nil
+		return false, "connection refused", nil
 	}
-	return false, err
+	return false, "", err
 }
 
 func isConnectionRefused(err error) bool {
@@ -476,25 +864,6 @@ func formatDuration(duration time.Duration) string {
 	return duration.Round(time.Millisecond).String()
 }
 
-func envOrDefault(name, fallback string) string {
-	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
-		return value
-	}
-	return fallback
-}
-
-func envDuration(name string, fallback time.Duration) time.Duration {
-	raw := strings.TrimSpace(os.Getenv(name))
-	if raw == "" {
-		return fallback
-	}
-	value, err := time.ParseDuration(raw)
-	if err != nil {
-		return fallback
-	}
-	return value
-}
-
 func defaultShell() string {
 	if runtime.GOOS == "windows" {
 		return "powershell"
@@ -513,12 +882,19 @@ func printUsage() {
 	fmt.Fprintln(out, "  netferry run     [flags] -- <command> [args...]")
 	fmt.Fprintln(out, "  netferry doctor  [flags] [host...]")
 	fmt.Fprintln(out, "  netferry env     [flags]")
+	fmt.Fprintln(out, "  netferry status  [flags]")
+	fmt.Fprintln(out, "  netferry config  <path|show|init> [flags]")
+	fmt.Fprintln(out, "  netferry install [flags]")
+	fmt.Fprintln(out, "  netferry uninstall [--dry-run]")
+	fmt.Fprintln(out, "  netferry service <start|stop|status> [--dry-run]")
 	fmt.Fprintln(out, "  netferry version")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Common flags:")
+	fmt.Fprintln(out, "  --config string     configuration file path")
 	fmt.Fprintf(out, "  --upstream string   upstream proxy URL (default %s)\n", defaultUpstream)
 	fmt.Fprintf(out, "  --listen string     local proxy address (default %s)\n", defaultListen)
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Environment:")
-	fmt.Fprintln(out, "  NETFERRY_UPSTREAM, NETFERRY_LISTEN, NETFERRY_PROBE_TIMEOUT, NETFERRY_CACHE_TTL")
+	fmt.Fprintln(out, "  NETFERRY_CONFIG, NETFERRY_UPSTREAM, NETFERRY_LISTEN")
+	fmt.Fprintln(out, "  NETFERRY_PROBE_TIMEOUT, NETFERRY_CACHE_TTL")
 }

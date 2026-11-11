@@ -101,3 +101,25 @@ func TestRejectsNonLoopbackClient(t *testing.T) {
 		t.Fatalf("status = %d, want 403", recorder.Code)
 	}
 }
+
+func TestHealthEndpoint(t *testing.T) {
+	server := httptest.NewServer(&Server{})
+	defer server.Close()
+
+	response, err := server.Client().Get(server.URL + "/__netferry/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200", response.StatusCode)
+	}
+	if string(body) != "netferry ok\n" {
+		t.Fatalf("body = %q", body)
+	}
+}
