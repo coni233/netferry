@@ -56,9 +56,10 @@ go build -o bin/netferry.exe ./cmd/netferry
 Download the archive for your operating system from
 [GitHub Releases](https://github.com/coni233/netferry/releases):
 
-- Windows: extract the `.zip`, then run `netferry.exe setup`.
-- Linux and macOS: extract the `.tar.gz`, run `chmod +x netferry`, then run
-  `./netferry setup`.
+- Windows: extract the `.zip`, then double-click `install.bat`. To remove
+  NetFerry later, double-click `uninstall.bat`.
+- Linux and macOS: extract the `.tar.gz`, then run `./install.sh`. To remove
+  NetFerry later, run `./uninstall.sh`.
 
 Release archives include this README and the license. `checksums.txt` contains
 the SHA-256 digest for every archive.
@@ -92,6 +93,17 @@ Common defaults include:
 These values are conventions, not guarantees. Always check the proxy
 application's local listening settings.
 
+Run the built-in detector to inspect active common proxy ports:
+
+```powershell
+.\netferry.exe detect
+```
+
+When no configuration file exists, `setup` automatically uses the first usable
+detected proxy. Detection covers common v2rayN, Clash/Mihomo, Shadowsocks, and
+sing-box/NekoBox ports and distinguishes SOCKS5 from HTTP. Use
+`--no-detect` when running `setup` to keep the configured default instead.
+
 Use the matching URL scheme:
 
 ```toml
@@ -111,20 +123,23 @@ be reached directly.
 
 1. Download `netferry-windows-amd64.zip` from GitHub Releases.
 2. Extract it to a permanent directory, such as `C:\Tools\NetFerry`.
-3. Open PowerShell in that directory.
-4. Preview the changes:
+3. Double-click `install.bat`, or open PowerShell in that directory for manual
+   installation.
+4. The script previews detected proxies and installation changes before asking
+   for confirmation.
+5. For manual installation, preview the changes:
 
    ```powershell
    .\netferry.exe setup --dry-run
    ```
 
-5. Install automatic startup and proxy environment variables:
+6. Install automatic startup and proxy environment variables:
 
    ```powershell
    .\netferry.exe setup
    ```
 
-6. Restart Codex, Claude Code, DeepSeek harness, terminals, IDEs, and other
+7. Restart Codex, Claude Code, DeepSeek harness, terminals, IDEs, and other
    tools that should inherit the new environment.
 
 `setup` creates the default configuration, installs a current-user login task,
@@ -149,8 +164,7 @@ processes do not receive the new environment, so restart them before testing.
 tar -xzf netferry-linux-amd64.tar.gz
 cd netferry-linux-amd64
 chmod +x netferry
-./netferry setup --dry-run
-./netferry setup
+./install.sh
 ```
 
 Use the archive matching your OS and architecture. On Linux, sign out and back
@@ -283,6 +297,9 @@ configuration file, then built-in defaults.
 .\netferry.exe uninstall
 ```
 
+Release package users can double-click `uninstall.bat` on Windows or run
+`./uninstall.sh` on Linux/macOS.
+
 This removes the startup integration and restores proxy variables whose current
 values are still managed by NetFerry:
 
@@ -346,6 +363,7 @@ netferry doctor   Test direct and upstream routes
 netferry env      Print shell environment setup
 netferry status   Show proxy and service status
 netferry config   Locate, show, or initialize configuration
+netferry detect   Detect common local proxy ports and protocols
 netferry setup    Install automatic startup and proxy environment
 netferry install  Install user-level automatic startup
 netferry uninstall Remove startup and managed environment

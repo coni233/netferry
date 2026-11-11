@@ -50,9 +50,9 @@ go build -o bin/netferry.exe ./cmd/netferry
 
 从 [GitHub Releases](https://github.com/coni233/netferry/releases) 下载与系统对应的压缩包：
 
-- Windows：解压 `.zip`，运行 `netferry.exe setup`。
-- Linux 和 macOS：解压 `.tar.gz`，运行 `chmod +x netferry`，然后执行
-  `./netferry setup`。
+- Windows：解压 `.zip`，双击 `install.bat`。以后需要卸载时双击 `uninstall.bat`。
+- Linux 和 macOS：解压 `.tar.gz`，运行 `./install.sh`。
+  以后需要卸载时运行 `./uninstall.sh`。
 
 发布包中包含 README 和许可证文件。`checksums.txt` 包含每个压缩包的 SHA-256 校验值。
 
@@ -83,6 +83,17 @@ socks5h://127.0.0.1:10808
 
 这些端口是常见约定，并不是所有版本都保证如此。请以代理软件显示的本地监听设置为准。
 
+可以运行内置检测命令查看当前可用的常见代理端口：
+
+```powershell
+.\netferry.exe detect
+```
+
+如果配置文件尚不存在，`setup` 会自动使用检测到的第一个可用代理。
+检测范围包括 v2rayN、Clash/Mihomo、Shadowsocks、sing-box/NekoBox 的常见端口，
+并能区分 SOCKS5 和 HTTP。如果希望保留配置默认值，可以在执行 `setup` 时增加
+`--no-detect`。
+
 配置时要使用与端口匹配的协议：
 
 ```toml
@@ -101,20 +112,21 @@ upstream = "http://127.0.0.1:7890"
 
 1. 从 GitHub Releases 下载 `netferry-windows-amd64.zip`。
 2. 解压到长期保留的目录，例如 `C:\Tools\NetFerry`。
-3. 在该目录打开 PowerShell。
-4. 先预览安装操作：
+3. 双击 `install.bat`；也可以在目录中打开 PowerShell 手动安装。
+4. 脚本会先显示检测到的代理和安装预览，然后要求确认。
+5. 手动安装时先预览：
 
    ```powershell
    .\netferry.exe setup --dry-run
    ```
 
-5. 正式安装自动启动和代理环境：
+6. 正式安装自动启动和代理环境：
 
    ```powershell
    .\netferry.exe setup
    ```
 
-6. 完全退出并重新启动 Codex、Claude Code、DeepSeek harness、终端、IDE
+7. 完全退出并重新启动 Codex、Claude Code、DeepSeek harness、终端、IDE
    以及其他需要继承新环境的程序。
 
 `setup` 会创建默认配置、安装当前用户的登录任务、启动网关，并写入持久的
@@ -138,8 +150,7 @@ upstream = "http://127.0.0.1:7890"
 tar -xzf netferry-linux-amd64.tar.gz
 cd netferry-linux-amd64
 chmod +x netferry
-./netferry setup --dry-run
-./netferry setup
+./install.sh
 ```
 
 请选择匹配系统和 CPU 架构的压缩包。Linux 用户需要注销并重新登录，使桌面会话
@@ -267,6 +278,9 @@ cache_ttl = "5m"
 .\netferry.exe uninstall
 ```
 
+使用发布包时，Windows 可以双击 `uninstall.bat`，Linux/macOS 可以运行
+`./uninstall.sh`。
+
 卸载会删除自动启动项，并恢复仍由 NetFerry 管理的用户级代理环境变量：
 
 - `--dry-run` 只显示准备恢复和删除的操作，不修改电脑。
@@ -325,6 +339,7 @@ netferry doctor   测试直连和上游代理路径
 netferry env      输出 Shell 环境变量配置
 netferry status   查看代理和后台服务状态
 netferry config   查看、显示或初始化配置
+netferry detect   检测常见本地代理端口和协议
 netferry setup    安装自动启动和代理环境
 netferry install  安装用户级自动启动
 netferry uninstall 删除自动启动并恢复受管理的环境变量

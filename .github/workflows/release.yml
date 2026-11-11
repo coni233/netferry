@@ -25,6 +25,9 @@ jobs:
         run: |
           go vet ./...
           go test ./...
+          sh -n packaging/unix/install.sh packaging/unix/uninstall.sh
+          test -f packaging/windows/install.bat
+          test -f packaging/windows/uninstall.bat
       - name: Build release assets
         shell: bash
         run: |
@@ -51,8 +54,11 @@ jobs:
             cp README.md LICENSE "$staging/"
 
             if [ "$archive" = "zip" ]; then
+              cp packaging/windows/install.bat packaging/windows/uninstall.bat "$staging/"
               (cd .build && zip -qr "../dist/${name}.zip" "$name")
             else
+              cp packaging/unix/install.sh packaging/unix/uninstall.sh "$staging/"
+              chmod +x "${staging}/install.sh" "${staging}/uninstall.sh"
               tar -C .build -czf "dist/${name}.tar.gz" "$name"
             fi
           }
@@ -63,6 +69,11 @@ jobs:
           build_target linux arm64 "" tar
           build_target darwin amd64 "" tar
           build_target darwin arm64 "" tar
+
+          unzip -l dist/netferry-windows-amd64.zip | grep -q "install.bat"
+          unzip -l dist/netferry-windows-amd64.zip | grep -q "uninstall.bat"
+          tar -tzf dist/netferry-linux-amd64.tar.gz | grep -q "install.sh"
+          tar -tzf dist/netferry-linux-amd64.tar.gz | grep -q "uninstall.sh"
 
           (
             cd dist

@@ -15,7 +15,8 @@ The workflow:
 1. Runs `go vet` and all tests.
 2. Builds Windows, Linux, and macOS binaries for amd64 and arm64.
 3. Injects the tag version into `netferry --version`.
-4. Packages each binary with `README.md` and `LICENSE`.
+4. Packages each binary with `README.md`, `LICENSE`, and platform installer
+   scripts.
 5. Generates `checksums.txt`.
 6. Creates a GitHub Release with generated release notes.
 
