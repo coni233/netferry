@@ -9,13 +9,20 @@ keeps the direct route when it works and automatically falls back to a local
 proxy when the destination is unreachable.
 
 ```text
+Terminal commands
 Codex / Claude Code / DeepSeek harness / any CLI
-                    |
-          HTTP_PROXY / HTTPS_PROXY
-                    |
-            NetFerry :17890
-               /         \
-          direct       upstream proxy
+                        |
+               create a network request
+                        |
+  HTTP_PROXY / HTTPS_PROXY -> configured NetFerry address
+                        |
+                 NetFerry local gateway
+                    /          \
+             direct works   direct fails
+                  |              |
+          access target    configured upstream proxy
+                                 |
+                           access target
 ```
 
 The agent does not need to decide whether a proxy is required. Every request
@@ -56,49 +63,252 @@ Download the archive for your operating system from
 Release archives include this README and the license. `checksums.txt` contains
 the SHA-256 digest for every archive.
 
-## Quick start
+## Before you begin
 
-Start the gateway with the proxy application listening on
-`socks5h://127.0.0.1:10808`:
+You do not need Go to use a release archive.
 
-```powershell
-.\bin\netferry.exe serve --upstream socks5h://127.0.0.1:10808
+The default configuration expects a local proxy at:
+
+```text
+socks5h://127.0.0.1:10808
 ```
 
-Check both routes for GitHub:
+`10808` is the default mixed local port in recent v2rayN versions. Other proxy
+applications commonly use different ports, so verify the local listening port
+in your proxy application and change the configuration when necessary.
 
-```powershell
-.\bin\netferry.exe doctor github.com api.github.com codeload.github.com
+Common defaults include:
+
+| Proxy software | Common local port | Notes |
+| --- | --- | --- |
+| v2rayN (recent versions) | `10808` | Usually one mixed port for SOCKS5 and HTTP |
+| Older v2rayN / V2Ray setups | SOCKS5 `10808`, HTTP `10809` | Actual values come from the configuration |
+| Clash, Clash Verge, Mihomo | `7890` | Mixed HTTP/SOCKS port; split setups sometimes use SOCKS `7891` |
+| sing-box | No universal default | Defined by the inbound configuration; `2080` is a common example |
+| NekoBox / Nekoray | No universal default | Defined by the inbound configuration; `2080` is a common example |
+| Shadowsocks Windows / SSR | `1080` | Common local SOCKS5 port; builds may differ |
+| V2Ray / Xray | No universal default | Defined by the configuration; SOCKS `1080` and HTTP `8080` are common examples |
+
+These values are conventions, not guarantees. Always check the proxy
+application's local listening settings.
+
+Use the matching URL scheme:
+
+```toml
+# SOCKS5
+upstream = "socks5h://127.0.0.1:10808"
+
+# HTTP proxy
+upstream = "http://127.0.0.1:7890"
 ```
 
-Install the local gateway and configure it to start after user login:
+NetFerry still works without a running upstream proxy when the destination can
+be reached directly.
 
-```powershell
-.\bin\netferry.exe setup --dry-run
-.\bin\netferry.exe setup
+## One-time setup
+
+### Windows
+
+1. Download `netferry-windows-amd64.zip` from GitHub Releases.
+2. Extract it to a permanent directory, such as `C:\Tools\NetFerry`.
+3. Open PowerShell in that directory.
+4. Preview the changes:
+
+   ```powershell
+   .\netferry.exe setup --dry-run
+   ```
+
+5. Install automatic startup and proxy environment variables:
+
+   ```powershell
+   .\netferry.exe setup
+   ```
+
+6. Restart Codex, Claude Code, DeepSeek harness, terminals, IDEs, and other
+   tools that should inherit the new environment.
+
+`setup` creates the default configuration, installs a current-user login task,
+starts the gateway, and writes persistent user-level proxy variables. It does
+not require administrator privileges.
+
+On Windows, `netferry.exe setup` specifically:
+
+1. Creates the NetFerry configuration file.
+2. Adds a login task that starts NetFerry for the current Windows user.
+3. Starts the NetFerry gateway immediately.
+4. Sets persistent proxy variables for the current Windows user:
+   `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, their lowercase variants, and
+   `NO_PROXY` / `no_proxy`.
+
+It does not modify machine-wide environment variables. Already-running
+processes do not receive the new environment, so restart them before testing.
+
+### Linux and macOS
+
+```bash
+tar -xzf netferry-linux-amd64.tar.gz
+cd netferry-linux-amd64
+chmod +x netferry
+./netferry setup --dry-run
+./netferry setup
 ```
 
-`setup` installs both the automatic startup service and the user-level proxy
-environment. Restart Agent applications afterward so they inherit the new
-variables. Use `--no-service` or `--no-env` to install only one part.
+Use the archive matching your OS and architecture. On Linux, sign out and back
+in so the desktop session loads `environment.d`. On macOS, restart Agent
+applications after setup.
 
-Use `status` to inspect the proxy and service:
+## Verify the installation
 
-```powershell
-.\bin\netferry.exe status
-.\bin\netferry.exe status --json
-```
-
-Launch any coding agent through a temporary gateway:
+Open a new terminal and run:
 
 ```powershell
-.\bin\netferry.exe run -- codex
-.\bin\netferry.exe run -- claude
+.\netferry.exe status
 ```
 
-The child process inherits `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and their
-lowercase variants. `run` starts an ephemeral gateway when no local NetFerry
-instance is already listening.
+A working installation looks like:
+
+```text
+status:      running
+listen:      127.0.0.1:17890
+proxy:       http://127.0.0.1:17890
+upstream:    socks5h://127.0.0.1:10808
+service:     Windows logon task (installed)
+environment: Windows user environment (installed)
+```
+
+Check the environment inherited by the new process:
+
+```powershell
+$env:HTTPS_PROXY
+```
+
+It should print:
+
+```text
+http://127.0.0.1:17890
+```
+
+Check direct and proxy connectivity:
+
+```powershell
+.\netferry.exe doctor github.com api.github.com codeload.github.com
+```
+
+Then test with a real command:
+
+```powershell
+git ls-remote https://github.com/coni233/netferry.git HEAD
+```
+
+## Everyday use
+
+After setup, launch your normal tools and execute commands normally:
+
+```powershell
+git clone https://github.com/example/project.git
+curl https://github.com
+npm install
+pip install requests
+gh repo view
+```
+
+You do not need to tell an Agent to enable the proxy. Network-capable programs
+that honor `HTTP_PROXY`, `HTTPS_PROXY`, or `ALL_PROXY` send requests to
+`127.0.0.1:17890`. NetFerry then selects a direct connection or the configured
+upstream proxy for each destination.
+
+This is not a VPN or a command wrapper. Commands without network activity are
+unaffected, and programs that ignore standard proxy variables are not captured.
+
+## Temporary use
+
+To test one command group without installing persistent startup or environment
+variables:
+
+```powershell
+.\netferry.exe run -- git clone https://github.com/example/project.git
+.\netferry.exe run -- codex
+.\netferry.exe run -- claude
+```
+
+`run` starts an ephemeral gateway when no NetFerry process is already running.
+The child process inherits both uppercase and lowercase proxy variables.
+
+You can also run only the gateway:
+
+```powershell
+.\netferry.exe serve
+```
+
+## Configuration
+
+Find the generated file:
+
+```powershell
+.\netferry.exe config path
+```
+
+Edit it with a text editor:
+
+```toml
+listen = "127.0.0.1:17890"
+upstream = "socks5h://127.0.0.1:10808"
+probe_timeout = "1500ms"
+cache_ttl = "5m"
+```
+
+After changing the configuration, restart the gateway:
+
+```powershell
+.\netferry.exe service stop
+.\netferry.exe service start
+```
+
+Configuration precedence is command-line flags, environment variables,
+configuration file, then built-in defaults.
+
+## Service control
+
+```powershell
+.\netferry.exe status
+.\netferry.exe service start
+.\netferry.exe service stop
+.\netferry.exe service status
+```
+
+## Uninstall
+
+```powershell
+.\netferry.exe uninstall --dry-run
+.\netferry.exe uninstall
+```
+
+This removes the startup integration and restores proxy variables whose current
+values are still managed by NetFerry:
+
+- `--dry-run` only prints the restoration and removal actions.
+- A variable that did not exist before setup is removed.
+- A variable that existed before setup is restored to its saved value.
+- A variable changed manually after setup is left unchanged.
+- Only the current user's variables are affected.
+- Running Agent applications retain their old environment until restarted.
+
+Uninstall does not delete the downloaded executable, configuration file, or log
+files. It also does not stop a manually launched `netferry serve` process. Use
+`--keep-env` to remove only the startup integration.
+
+## Troubleshooting
+
+- `status` says `stopped`: run `netferry service start` and check the upstream
+  proxy application.
+- The upstream route fails: verify the proxy address in the configuration and
+  run `netferry doctor github.com`.
+- A newly installed environment is not visible: close the tool completely and
+  start a new process. Existing processes do not receive environment updates.
+- Git over SSH such as `git@github.com:owner/repo.git` does not use
+  `HTTPS_PROXY`; HTTPS clone URLs are currently the supported path.
+- `ping`, raw TCP clients, and applications with built-in networking that
+  ignores standard proxy variables are not intercepted yet.
 
 ## Configure Codex shell commands
 
@@ -118,13 +328,13 @@ set = {
 Other tools can use the output of:
 
 ```powershell
-.\bin\netferry.exe env --shell powershell
+.\netferry.exe env --shell powershell
 ```
 
 or:
 
 ```bash
-./bin/netferry env --shell bash
+./netferry env --shell bash
 ```
 
 ## Commands
