@@ -27,6 +27,8 @@ go.work.sum
 
 # Local build and toolchain artifacts
 bin/
+dist/
+.build/
 .tools/
 
 # env file

@@ -39,6 +39,16 @@ NetFerry 目前处于早期开发阶段。当前 MVP 提供以下能力：
 go build -o bin/netferry.exe ./cmd/netferry
 ```
 
+## 安装正式版本
+
+从 [GitHub Releases](https://github.com/coni233/netferry/releases) 下载与系统对应的压缩包：
+
+- Windows：解压 `.zip`，运行 `netferry.exe setup`。
+- Linux 和 macOS：解压 `.tar.gz`，运行 `chmod +x netferry`，然后执行
+  `./netferry setup`。
+
+发布包中包含 README 和许可证文件。`checksums.txt` 包含每个压缩包的 SHA-256 校验值。
+
 ## 快速开始
 
 使用监听在 `socks5h://127.0.0.1:10808` 的代理程序启动网关：

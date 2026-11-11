@@ -44,6 +44,18 @@ OS-level redirection are on the roadmap.
 go build -o bin/netferry.exe ./cmd/netferry
 ```
 
+## Install a release
+
+Download the archive for your operating system from
+[GitHub Releases](https://github.com/coni233/netferry/releases):
+
+- Windows: extract the `.zip`, then run `netferry.exe setup`.
+- Linux and macOS: extract the `.tar.gz`, run `chmod +x netferry`, then run
+  `./netferry setup`.
+
+Release archives include this README and the license. `checksums.txt` contains
+the SHA-256 digest for every archive.
+
 ## Quick start
 
 Start the gateway with the proxy application listening on

@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "stable"
+          cache: false
+      - name: Verify
+        run: |
+          go vet ./...
+          go test ./...
+      - name: Build release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist .build
+
+          build_target() {
+            goos="$1"
+            goarch="$2"
+            suffix="$3"
+            archive="$4"
+            name="netferry-${goos}-${goarch}"
+            staging=".build/${name}"
+
+            mkdir -p "$staging"
+            GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build \
+              -buildvcs=false \
+              -trimpath \
+              -ldflags "-s -w -X main.version=${version}" \
+              -o "${staging}/netferry${suffix}" \
+              ./cmd/netferry
+            cp README.md LICENSE "$staging/"
+
+            if [ "$archive" = "zip" ]; then
+              (cd .build && zip -qr "../dist/${name}.zip" "$name")
+            else
+              tar -C .build -czf "dist/${name}.tar.gz" "$name"
+            fi
+          }
+
+          build_target windows amd64 .exe zip
+          build_target windows arm64 .exe zip
+          build_target linux amd64 "" tar
+          build_target linux arm64 "" tar
+          build_target darwin amd64 "" tar
+          build_target darwin arm64 "" tar
+
+          (
+            cd dist
+            sha256sum netferry-* > checksums.txt
+          )
+
+          {
+            echo "## NetFerry ${GITHUB_REF_NAME}"
+            echo
+            echo '```text'
+            cat dist/checksums.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/* --clobber
+          else
+            gh release create "$tag" dist/* \
+              --title "NetFerry ${tag}" \
+              --generate-notes
+          fi
