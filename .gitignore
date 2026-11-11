@@ -25,6 +25,10 @@ profile.cov
 go.work
 go.work.sum
 
+# Local build and toolchain artifacts
+bin/
+.tools/
+
 # env file
 .env
 
