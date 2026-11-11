@@ -110,24 +110,28 @@ upstream = "http://127.0.0.1:7890"
 
 ### Windows
 
+#### 自动安装（推荐）
+
 1. 从 GitHub Releases 下载 `netferry-windows-amd64.zip`。
 2. 解压到长期保留的目录，例如 `C:\Tools\NetFerry`。
-3. 双击 `install.bat`；也可以在目录中打开 PowerShell 手动安装。
-4. 脚本会先显示检测到的代理和安装预览，然后要求确认。
-5. 手动安装时先预览：
-
-   ```powershell
-   .\netferry.exe setup --dry-run
-   ```
-
-6. 正式安装自动启动和代理环境：
-
-   ```powershell
-   .\netferry.exe setup
-   ```
-
-7. 完全退出并重新启动 Codex、Claude Code、DeepSeek harness、终端、IDE
+3. 双击 `install.bat`。
+4. 查看检测到的代理和安装预览，然后输入 `Y` 确认。
+5. 完全退出并重新启动 Codex、Claude Code、DeepSeek harness、终端、IDE
    以及其他需要继承新环境的程序。
+
+不需要再手动执行 `setup`。`install.bat` 会自动完成代理检测、
+`setup --dry-run`、确认和正式 `setup`。
+
+#### 手动安装
+
+如果希望在 PowerShell 中手动操作：
+
+```powershell
+.\netferry.exe setup --dry-run
+.\netferry.exe setup
+```
+
+手动安装与双击 `install.bat` 执行的操作相同。
 
 `setup` 会创建默认配置、安装当前用户的登录任务、启动网关，并写入持久的
 用户级代理环境变量，不需要管理员权限。
@@ -273,13 +277,22 @@ cache_ttl = "5m"
 
 ## 卸载
 
+### 自动卸载（推荐）
+
+- Windows：双击 `uninstall.bat`。
+- Linux 和 macOS：运行 `./uninstall.sh`。
+
+脚本会自动执行 `uninstall --dry-run`，显示准备修改的内容，并在确认后删除自动启动项
+和恢复受管理的代理环境变量。不需要再手动执行其他卸载命令。
+
+### 手动卸载
+
 ```powershell
 .\netferry.exe uninstall --dry-run
 .\netferry.exe uninstall
 ```
 
-使用发布包时，Windows 可以双击 `uninstall.bat`，Linux/macOS 可以运行
-`./uninstall.sh`。
+手动卸载与双击 `uninstall.bat` 执行的操作相同。
 
 卸载会删除自动启动项，并恢复仍由 NetFerry 管理的用户级代理环境变量：
 

@@ -121,26 +121,28 @@ be reached directly.
 
 ### Windows
 
+#### Automatic installation (recommended)
+
 1. Download `netferry-windows-amd64.zip` from GitHub Releases.
 2. Extract it to a permanent directory, such as `C:\Tools\NetFerry`.
-3. Double-click `install.bat`, or open PowerShell in that directory for manual
-   installation.
-4. The script previews detected proxies and installation changes before asking
-   for confirmation.
-5. For manual installation, preview the changes:
-
-   ```powershell
-   .\netferry.exe setup --dry-run
-   ```
-
-6. Install automatic startup and proxy environment variables:
-
-   ```powershell
-   .\netferry.exe setup
-   ```
-
-7. Restart Codex, Claude Code, DeepSeek harness, terminals, IDEs, and other
+3. Double-click `install.bat`.
+4. Review the detected proxy and installation preview, then answer `Y`.
+5. Restart Codex, Claude Code, DeepSeek harness, terminals, IDEs, and other
    tools that should inherit the new environment.
+
+No additional `setup` commands are required. The script runs detection,
+`setup --dry-run`, confirmation, and `setup` automatically.
+
+#### Manual installation
+
+If you prefer PowerShell, preview and install manually:
+
+```powershell
+.\netferry.exe setup --dry-run
+.\netferry.exe setup
+```
+
+Manual installation performs the same changes as `install.bat`.
 
 `setup` creates the default configuration, installs a current-user login task,
 starts the gateway, and writes persistent user-level proxy variables. It does
@@ -292,13 +294,23 @@ configuration file, then built-in defaults.
 
 ## Uninstall
 
+### Automatic uninstall (recommended)
+
+- Windows: double-click `uninstall.bat`.
+- Linux and macOS: run `./uninstall.sh`.
+
+The script runs `uninstall --dry-run`, shows the planned changes, and waits for
+confirmation before removing the startup integration and managed environment.
+No manual commands are required.
+
+### Manual uninstall
+
 ```powershell
 .\netferry.exe uninstall --dry-run
 .\netferry.exe uninstall
 ```
 
-Release package users can double-click `uninstall.bat` on Windows or run
-`./uninstall.sh` on Linux/macOS.
+Manual uninstall performs the same changes as the release script.
 
 This removes the startup integration and restores proxy variables whose current
 values are still managed by NetFerry:
