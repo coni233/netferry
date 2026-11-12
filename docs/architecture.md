@@ -38,6 +38,7 @@ it is not part of the network data path.
 ```text
 cmd/netferry        CLI entry point
 internal/config     flat TOML configuration and precedence
+internal/detect     local proxy discovery (system settings, environment, common ports)
 internal/router     direct/proxy route selection and cache
 internal/service    Windows task, macOS LaunchAgent, systemd user service
 internal/upstream   HTTP CONNECT and SOCKS5 upstream dialers

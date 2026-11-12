@@ -85,6 +85,7 @@ Common defaults include:
 | v2rayN (recent versions) | `10808` | Usually one mixed port for SOCKS5 and HTTP |
 | Older v2rayN / V2Ray setups | SOCKS5 `10808`, HTTP `10809` | Actual values come from the configuration |
 | Clash, Clash Verge, Mihomo | `7890` | Mixed HTTP/SOCKS port; split setups sometimes use SOCKS `7891` |
+| Clash Verge Rev / Kiri Verge | `7897` | Default mixed HTTP/SOCKS port in recent versions |
 | sing-box | No universal default | Defined by the inbound configuration; `2080` is a common example |
 | NekoBox / Nekoray | No universal default | Defined by the inbound configuration; `2080` is a common example |
 | Shadowsocks Windows / SSR | `1080` | Common local SOCKS5 port; builds may differ |
@@ -100,9 +101,12 @@ Run the built-in detector to inspect active common proxy ports:
 ```
 
 When no configuration file exists, `setup` automatically uses the first usable
-detected proxy. Detection covers common v2rayN, Clash/Mihomo, Shadowsocks, and
-sing-box/NekoBox ports and distinguishes SOCKS5 from HTTP. Use
-`--no-detect` when running `setup` to keep the configured default instead.
+detected proxy. Detection reads the operating system proxy settings (Windows
+registry, macOS `scutil`, and GNOME/KDE on Linux) plus the `HTTPS_PROXY`,
+`HTTP_PROXY`, and `ALL_PROXY` environment variables, then falls back to common
+v2rayN, Clash/Mihomo, Shadowsocks, and sing-box/NekoBox ports. Each endpoint is
+probed for SOCKS5 and HTTP support. Use `--no-detect` when running `setup` to
+keep the configured default instead.
 
 Use the matching URL scheme:
 

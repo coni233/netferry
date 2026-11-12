@@ -76,6 +76,7 @@ socks5h://127.0.0.1:10808
 | v2rayN（较新版本） | `10808` | 通常是 SOCKS5 和 HTTP 共用的混合端口 |
 | 较旧 v2rayN / V2Ray 配置 | SOCKS5 `10808`、HTTP `10809` | 实际端口由配置决定 |
 | Clash、Clash Verge、Mihomo | `7890` | 常见 HTTP/SOCKS 混合端口；拆分配置有时使用 SOCKS `7891` |
+| Clash Verge Rev / Kiri Verge | `7897` | 较新版本的默认 HTTP/SOCKS 混合端口 |
 | sing-box | 没有统一默认值 | 由 inbound 配置决定，`2080` 是常见示例 |
 | NekoBox / Nekoray | 没有统一默认值 | 由 inbound 配置决定，`2080` 是常见示例 |
 | Shadowsocks Windows / SSR | `1080` | 常见本地 SOCKS5 端口，不同版本可能不同 |
@@ -90,9 +91,10 @@ socks5h://127.0.0.1:10808
 ```
 
 如果配置文件尚不存在，`setup` 会自动使用检测到的第一个可用代理。
-检测范围包括 v2rayN、Clash/Mihomo、Shadowsocks、sing-box/NekoBox 的常见端口，
-并能区分 SOCKS5 和 HTTP。如果希望保留配置默认值，可以在执行 `setup` 时增加
-`--no-detect`。
+检测会先读取操作系统代理设置（Windows 注册表、macOS `scutil`、Linux 的
+GNOME/KDE 设置）以及 `HTTPS_PROXY`、`HTTP_PROXY`、`ALL_PROXY` 环境变量，再回退到
+v2rayN、Clash/Mihomo、Shadowsocks、sing-box/NekoBox 的常见端口，并逐个探测 SOCKS5
+和 HTTP 支持情况。如果希望保留配置默认值，可以在执行 `setup` 时增加 `--no-detect`。
 
 配置时要使用与端口匹配的协议：
 

@@ -712,7 +712,7 @@ func initialSettingsForInstall(path string, autoDetect bool) (config.Settings, *
 
 	var detected *detect.Candidate
 	if autoDetect && strings.TrimSpace(os.Getenv("NETFERRY_UPSTREAM")) == "" {
-		candidates := detect.Detect(context.Background(), 500*time.Millisecond)
+		candidates := detect.DetectExcept(context.Background(), 500*time.Millisecond, settings.Listen)
 		for index := range candidates {
 			if candidates[index].Upstream != "" {
 				settings.Upstream = candidates[index].Upstream

@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/coni233/netferry/internal/config"
 )
 
 type Target struct {
@@ -31,6 +33,7 @@ func CommonTargets() []Target {
 	return []Target{
 		{Software: "v2rayN", Name: "mixed proxy", Address: "127.0.0.1:10808", Priority: 10},
 		{Software: "Clash / Clash Verge / Mihomo", Name: "mixed proxy", Address: "127.0.0.1:7890", Priority: 20},
+		{Software: "Clash Verge Rev / Kiri Verge", Name: "mixed proxy", Address: "127.0.0.1:7897", Priority: 25},
 		{Software: "Shadowsocks", Name: "SOCKS5 proxy", Address: "127.0.0.1:1080", Priority: 30},
 		{Software: "sing-box / NekoBox", Name: "mixed proxy", Address: "127.0.0.1:2080", Priority: 40},
 		{Software: "v2rayN / V2Ray", Name: "HTTP proxy", Address: "127.0.0.1:10809", Priority: 50},
@@ -39,13 +42,32 @@ func CommonTargets() []Target {
 }
 
 func Detect(ctx context.Context, timeout time.Duration) []Candidate {
-	targets := CommonTargets()
-	sort.Slice(targets, func(i, j int) bool {
+	return DetectExcept(ctx, timeout)
+}
+
+// DetectExcept probes discovery sources while ignoring endpoints that NetFerry
+// itself may listen on, which prevents an upstream loop.
+func DetectExcept(ctx context.Context, timeout time.Duration, skip ...string) []Candidate {
+	targets := append(systemTargets(), CommonTargets()...)
+	sort.SliceStable(targets, func(i, j int) bool {
 		return targets[i].Priority < targets[j].Priority
 	})
 
+	skipped := map[string]bool{
+		normalizeProxyAddress(config.DefaultListen): true,
+	}
+	for _, address := range skip {
+		skipped[normalizeProxyAddress(address)] = true
+	}
+	seen := make(map[string]bool, len(targets))
 	var candidates []Candidate
 	for _, target := range targets {
+		address := normalizeProxyAddress(target.Address)
+		if address == "" || skipped[address] || seen[address] {
+			continue
+		}
+		seen[address] = true
+
 		protocols, authNeeded, ok := Probe(ctx, target.Address, timeout)
 		if !ok {
 			continue
