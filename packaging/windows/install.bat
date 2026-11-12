@@ -50,7 +50,6 @@ if errorlevel 1 goto install
 netferry.exe setup %SETUP_FLAGS%
 if errorlevel 1 goto fail
 echo.
-echo NetFerry installation completed.
 echo Restart Codex, Claude Code, DeepSeek harness, terminals, and IDEs.
 echo.
 netferry.exe status
@@ -70,6 +69,6 @@ exit /b 1
 
 :fail
 echo.
-echo NetFerry installation failed. Review the messages above.
+echo Review the messages above.
 pause
 exit /b 1

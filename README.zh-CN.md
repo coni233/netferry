@@ -164,7 +164,8 @@ upstream = "http://127.0.0.1:10808"
 在 Windows 上，`netferry.exe setup` 具体会：
 
 1. 创建 NetFerry 配置文件。
-2. 添加只对当前 Windows 用户生效的 `HKCU\...\Run` 登录启动命令。
+2. 添加只对当前 Windows 用户生效的 `HKCU\...\Run` 登录启动命令。如果管理员
+   策略禁用了注册表编辑，则自动回退到启动文件夹。
 3. 立即启动 NetFerry 网关。
 4. 为当前 Windows 用户设置持久代理环境变量：
    `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、对应的小写变量，以及
@@ -350,6 +351,9 @@ cache_ttl = "5m"
 
 - `status` 显示 `stopped`：执行 `netferry service start`，并确认上游代理程序正在运行。
 - Windows 自启动失败或网关没有启动：查看 `%APPDATA%\netferry\netferry.log`。
+- 管理员禁用了注册表编辑：NetFerry 会改用
+  `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\NetFerry.cmd`，
+  不再依赖 `HKCU` Run 项。
 - 上游代理路径失败：检查配置中的代理地址，并运行 `netferry doctor github.com`。
 - 安装后环境变量没有出现：完全退出原程序并重新启动；已经运行的进程不会自动更新环境。
 - `git@github.com:owner/repo.git` 这类 SSH 地址不使用 `HTTPS_PROXY`，

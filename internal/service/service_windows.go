@@ -41,7 +41,7 @@ func Install(spec Spec, dryRun bool) ([]string, error) {
 	)
 	messages := []string{
 		fmt.Sprintf("write %s", script),
-		"register current-user logon command NetFerry",
+		"register current-user logon startup",
 		"start NetFerry",
 	}
 	if dryRun {
@@ -56,7 +56,11 @@ func Install(spec Spec, dryRun bool) ([]string, error) {
 	}
 	removeLegacyTasks()
 	if err := setRunValue(command); err != nil {
-		return nil, err
+		startupPath, fallbackErr := installStartupLauncher(script)
+		if fallbackErr != nil {
+			return nil, fmt.Errorf("%v; startup folder fallback failed: %v", err, fallbackErr)
+		}
+		messages = append(messages, fmt.Sprintf("HKCU Run is unavailable; installed Startup folder launcher %s", startupPath))
 	}
 	if pid, ok := readPID(pidPath); ok && processRunning(pid) {
 		return append(messages, fmt.Sprintf("NetFerry already running (pid %d)", pid)), nil
@@ -73,7 +77,7 @@ func Uninstall(dryRun bool) ([]string, error) {
 		return nil, err
 	}
 	messages := []string{
-		"remove current-user logon command NetFerry",
+		"remove current-user logon startup",
 		"stop NetFerry",
 		fmt.Sprintf("remove %s", script),
 	}
@@ -84,6 +88,11 @@ func Uninstall(dryRun bool) ([]string, error) {
 	if runValueInstalled() {
 		if err := deleteRunValue(); err != nil {
 			return nil, err
+		}
+	}
+	if path, ok := startupLauncherInstalled(); ok {
+		if err := os.Remove(path); err != nil {
+			return nil, fmt.Errorf("remove Startup launcher: %w", err)
 		}
 	}
 	if pid, ok := readPID(pidPath); ok {
@@ -149,7 +158,10 @@ func CurrentStatus() (Status, error) {
 	if runValueInstalled() {
 		return Status{Manager: managerName, Installed: true, Detail: "HKCU logon command"}, nil
 	}
-	return Status{Manager: managerName, Detail: "no logon command"}, nil
+	if path, ok := startupLauncherInstalled(); ok {
+		return Status{Manager: managerName, Installed: true, Detail: path}, nil
+	}
+	return Status{Manager: managerName, Detail: "no logon startup"}, nil
 }
 
 func servicePaths() (scriptPath, pidPath, logPath string, err error) {
@@ -164,29 +176,73 @@ func servicePaths() (scriptPath, pidPath, logPath string, err error) {
 }
 
 func setRunValue(command string) error {
-	output, err := exec.Command(
+	err := exec.Command(
 		"reg.exe", "add", runKeyPath,
 		"/v", runValueName,
 		"/t", "REG_SZ",
 		"/d", command,
 		"/f",
-	).CombinedOutput()
+	).Run()
 	if err != nil {
-		return fmt.Errorf("register logon command: %w: %s", err, strings.TrimSpace(string(output)))
+		return fmt.Errorf("register logon command: %w (registry editing may be disabled by administrator policy)", err)
 	}
 	return nil
 }
 
 func deleteRunValue() error {
-	output, err := exec.Command("reg.exe", "delete", runKeyPath, "/v", runValueName, "/f").CombinedOutput()
+	err := exec.Command("reg.exe", "delete", runKeyPath, "/v", runValueName, "/f").Run()
 	if err != nil {
-		return fmt.Errorf("remove logon command: %w: %s", err, strings.TrimSpace(string(output)))
+		return fmt.Errorf("remove logon command: %w (registry editing may be disabled by administrator policy)", err)
 	}
 	return nil
 }
 
 func runValueInstalled() bool {
 	return exec.Command("reg.exe", "query", runKeyPath, "/v", runValueName).Run() == nil
+}
+
+func startupLauncherPath() (string, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("find user config directory: %w", err)
+	}
+	return filepath.Join(
+		dir,
+		"Microsoft", "Windows", "Start Menu", "Programs", "Startup",
+		"NetFerry.cmd",
+	), nil
+}
+
+func installStartupLauncher(script string) (string, error) {
+	path, err := startupLauncherPath()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return "", fmt.Errorf("create Startup folder: %w", err)
+	}
+	if err := os.WriteFile(path, []byte(renderStartupLauncher(script)), 0o600); err != nil {
+		return "", fmt.Errorf("write Startup launcher: %w", err)
+	}
+	return path, nil
+}
+
+func startupLauncherInstalled() (string, bool) {
+	path, err := startupLauncherPath()
+	if err != nil {
+		return "", false
+	}
+	if _, err := os.Stat(path); err != nil {
+		return "", false
+	}
+	return path, true
+}
+
+func renderStartupLauncher(script string) string {
+	escaped := strings.ReplaceAll(script, "%", "%%")
+	return "@echo off\r\n" +
+		"start \"\" powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File \"" +
+		escaped + "\"\r\n"
 }
 
 func startScript(script, pidPath, logPath string) error {

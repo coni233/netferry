@@ -63,7 +63,6 @@ esac
 
 ./netferry setup ${SETUP_FLAGS}
 echo
-echo "NetFerry installation completed."
 echo "Sign out and back in so new desktop sessions receive the environment."
 echo
 ./netferry status || true

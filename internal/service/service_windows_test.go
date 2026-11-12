@@ -50,3 +50,36 @@ func TestReadPID(t *testing.T) {
 		t.Fatal("invalid PID file reported as valid")
 	}
 }
+
+func TestRenderStartupLauncher(t *testing.T) {
+	content := renderStartupLauncher(`C:\Users\O'Brien\100%\netferry-service.ps1`)
+	if !strings.Contains(content, "powershell.exe") {
+		t.Fatalf("PowerShell launcher missing:\n%s", content)
+	}
+	if !strings.Contains(content, `O'Brien`) {
+		t.Fatalf("script path missing:\n%s", content)
+	}
+	if !strings.Contains(content, `100%%`) {
+		t.Fatalf("percent sign was not escaped for cmd.exe:\n%s", content)
+	}
+}
+
+func TestInstallStartupLauncher(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("AppData", dir)
+
+	path, err := installStartupLauncher(`C:\Tools\netferry-service.ps1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(path, dir) {
+		t.Fatalf("launcher path = %q, want under %q", path, dir)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "netferry-service.ps1") {
+		t.Fatalf("launcher content missing script path:\n%s", data)
+	}
+}

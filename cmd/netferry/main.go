@@ -590,7 +590,19 @@ func runDetect(args []string) int {
 	return 0
 }
 
-func runInstall(args []string) int {
+func runInstall(args []string) (code int) {
+	dryRunMode := false
+	defer func() {
+		switch {
+		case code != 0:
+			printError("NetFerry installation failed.")
+		case dryRunMode:
+			printSuccess("NetFerry install preview completed.")
+		default:
+			printSuccess("NetFerry automatic startup installed.")
+		}
+	}()
+
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
@@ -602,6 +614,7 @@ func runInstall(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	dryRunMode = *dryRun
 	configPath, err := resolveConfigPath(*configFlag)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
@@ -650,7 +663,19 @@ func runInstall(args []string) int {
 	return 0
 }
 
-func runSetup(args []string) int {
+func runSetup(args []string) (code int) {
+	dryRunMode := false
+	defer func() {
+		switch {
+		case code != 0:
+			printError("NetFerry installation failed.")
+		case dryRunMode:
+			printSuccess("NetFerry setup preview completed.")
+		default:
+			printSuccess("NetFerry installation completed. Restart terminals, IDEs, and agents to use it.")
+		}
+	}()
+
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
@@ -663,6 +688,7 @@ func runSetup(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	dryRunMode = *dryRun
 
 	configPath, err := resolveConfigPath(*configFlag)
 	if err != nil {

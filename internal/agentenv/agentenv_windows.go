@@ -130,6 +130,7 @@ func readUserEnvironment(names []string) (map[string]string, error) {
 		quoted = append(quoted, powerShellQuote(name))
 	}
 	script := fmt.Sprintf(`
+$ErrorActionPreference = 'Stop'
 $names = @(%s)
 $result = @{}
 foreach ($name in $names) {
@@ -192,15 +193,21 @@ func applyUserEnvironment(set map[string]string, changes map[string]*string) err
 
 func runPowerShell(script string) ([]byte, error) {
 	encoded := base64.StdEncoding.EncodeToString(utf16LE(script))
-	output, err := exec.Command(
+	command := exec.Command(
 		"powershell.exe",
 		"-NoProfile",
 		"-NonInteractive",
 		"-ExecutionPolicy", "Bypass",
 		"-EncodedCommand", encoded,
-	).CombinedOutput()
+	)
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	output, err := command.Output()
 	if err != nil {
-		return nil, fmt.Errorf("update Windows user environment: %w: %s", err, strings.TrimSpace(string(output)))
+		if detail := strings.TrimSpace(stderr.String()); detail != "" {
+			return nil, fmt.Errorf("update Windows user environment: %w: %s", err, detail)
+		}
+		return nil, fmt.Errorf("update Windows user environment: %w", err)
 	}
 	return output, nil
 }

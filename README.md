@@ -181,7 +181,9 @@ not require administrator privileges.
 On Windows, `netferry.exe setup` specifically:
 
 1. Creates the NetFerry configuration file.
-2. Adds an `HKCU\...\Run` command that starts NetFerry for the current Windows user.
+2. Adds an `HKCU\...\Run` command that starts NetFerry for the current Windows
+   user. If administrator policy disables registry editing, it falls back to a
+   Startup folder launcher.
 3. Starts the NetFerry gateway immediately.
 4. Sets persistent proxy variables for the current Windows user:
    `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, their lowercase variants, and
@@ -378,6 +380,9 @@ files. It also does not stop a manually launched `netferry serve` process. Use
   proxy application.
 - Windows startup fails or the gateway does not start: check
   `%APPDATA%\netferry\netferry.log`.
+- Registry editing is disabled by administrator policy: NetFerry uses
+  `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\NetFerry.cmd`
+  instead of the `HKCU` Run entry.
 - The upstream route fails: verify the proxy address in the configuration and
   run `netferry doctor github.com`.
 - A newly installed environment is not visible: close the tool completely and

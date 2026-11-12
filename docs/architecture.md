@@ -49,8 +49,9 @@ internal/proxy      loopback HTTP CONNECT server
 
 NetFerry starts at user login rather than installing a machine-wide daemon:
 
-- Windows uses an `HKCU\...\Run` entry and a hidden PowerShell launcher, so no
-  administrator rights are required.
+- Windows uses an `HKCU\...\Run` entry and a hidden PowerShell launcher, or a
+  Startup folder launcher when administrator policy blocks registry editing,
+  so no administrator rights are required.
 - macOS uses a per-user LaunchAgent.
 - Linux uses a systemd user service.
 
