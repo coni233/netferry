@@ -597,7 +597,7 @@ func runInstall(args []string) (code int) {
 		case code != 0:
 			printError("NetFerry installation failed.")
 		case dryRunMode:
-			printSuccess("NetFerry install preview completed.")
+			return
 		default:
 			printSuccess("NetFerry automatic startup installed.")
 		}
@@ -670,7 +670,7 @@ func runSetup(args []string) (code int) {
 		case code != 0:
 			printError("NetFerry installation failed.")
 		case dryRunMode:
-			printSuccess("NetFerry setup preview completed.")
+			return
 		default:
 			printSuccess("NetFerry installation completed. Restart terminals, IDEs, and agents to use it.")
 		}
