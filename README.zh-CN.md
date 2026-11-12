@@ -158,13 +158,13 @@ upstream = "http://127.0.0.1:10808"
 
 手动安装与双击 `install.bat` 执行的操作相同。
 
-`setup` 会创建默认配置、安装当前用户的登录任务、启动网关，并写入持久的
+`setup` 会创建默认配置、注册当前用户的登录启动命令、启动网关，并写入持久的
 用户级代理环境变量，不需要管理员权限。
 
 在 Windows 上，`netferry.exe setup` 具体会：
 
 1. 创建 NetFerry 配置文件。
-2. 添加一个只对当前 Windows 用户生效的登录启动任务。
+2. 添加只对当前 Windows 用户生效的 `HKCU\...\Run` 登录启动命令。
 3. 立即启动 NetFerry 网关。
 4. 为当前 Windows 用户设置持久代理环境变量：
    `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、对应的小写变量，以及
@@ -202,7 +202,7 @@ status:      running
 listen:      127.0.0.1:17890
 proxy:       http://127.0.0.1:17890
 upstream:    socks5h://127.0.0.1:10808
-service:     Windows logon task (installed)
+service:     Windows logon command (installed)
 environment: Windows user environment (installed)
 ```
 
@@ -338,13 +338,14 @@ cache_ttl = "5m"
 - 只会处理当前 Windows 用户的环境变量。
 - 已经运行的 Agent 和终端会保留旧环境，重新启动后才会生效。
 
-卸载不会删除下载的 `netferry.exe`、配置文件或日志文件，也不会停止用户手动运行、
-但不是由登录任务启动的 `netferry serve` 进程。
+卸载不会删除下载的 `netferry.exe`、配置文件或日志文件，也不会停止没有 PID
+记录的手动 `netferry serve` 进程。
 使用 `--keep-env` 可以只删除自动启动项并保留代理环境变量。
 
 ## 常见问题与限制
 
 - `status` 显示 `stopped`：执行 `netferry service start`，并确认上游代理程序正在运行。
+- Windows 自启动失败或网关没有启动：查看 `%APPDATA%\netferry\netferry.log`。
 - 上游代理路径失败：检查配置中的代理地址，并运行 `netferry doctor github.com`。
 - 安装后环境变量没有出现：完全退出原程序并重新启动；已经运行的进程不会自动更新环境。
 - `git@github.com:owner/repo.git` 这类 SSH 地址不使用 `HTTPS_PROXY`，

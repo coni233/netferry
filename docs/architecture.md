@@ -40,7 +40,7 @@ cmd/netferry        CLI entry point
 internal/config     flat TOML configuration and precedence
 internal/detect     local proxy discovery (system settings, environment, common ports)
 internal/router     direct/proxy route selection and cache
-internal/service    Windows task, macOS LaunchAgent, systemd user service
+internal/service    Windows logon command, macOS LaunchAgent, systemd user service
 internal/upstream   HTTP CONNECT and SOCKS5 upstream dialers
 internal/proxy      loopback HTTP CONNECT server
 ```
@@ -49,8 +49,8 @@ internal/proxy      loopback HTTP CONNECT server
 
 NetFerry starts at user login rather than installing a machine-wide daemon:
 
-- Windows uses a current-user Task Scheduler entry and a hidden PowerShell
-  wrapper.
+- Windows uses an `HKCU\...\Run` entry and a hidden PowerShell launcher, so no
+  administrator rights are required.
 - macOS uses a per-user LaunchAgent.
 - Linux uses a systemd user service.
 

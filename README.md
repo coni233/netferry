@@ -174,14 +174,14 @@ If you prefer PowerShell, preview and install manually:
 
 Manual installation performs the same changes as `install.bat`.
 
-`setup` creates the default configuration, installs a current-user login task,
+`setup` creates the default configuration, registers a current-user logon command,
 starts the gateway, and writes persistent user-level proxy variables. It does
 not require administrator privileges.
 
 On Windows, `netferry.exe setup` specifically:
 
 1. Creates the NetFerry configuration file.
-2. Adds a login task that starts NetFerry for the current Windows user.
+2. Adds an `HKCU\...\Run` command that starts NetFerry for the current Windows user.
 3. Starts the NetFerry gateway immediately.
 4. Sets persistent proxy variables for the current Windows user:
    `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, their lowercase variants, and
@@ -221,7 +221,7 @@ status:      running
 listen:      127.0.0.1:17890
 proxy:       http://127.0.0.1:17890
 upstream:    socks5h://127.0.0.1:10808
-service:     Windows logon task (installed)
+service:     Windows logon command (installed)
 environment: Windows user environment (installed)
 ```
 
@@ -371,6 +371,8 @@ files. It also does not stop a manually launched `netferry serve` process. Use
 
 - `status` says `stopped`: run `netferry service start` and check the upstream
   proxy application.
+- Windows startup fails or the gateway does not start: check
+  `%APPDATA%\netferry\netferry.log`.
 - The upstream route fails: verify the proxy address in the configuration and
   run `netferry doctor github.com`.
 - A newly installed environment is not visible: close the tool completely and
