@@ -88,3 +88,92 @@ func TestResolveSettingsPrecedence(t *testing.T) {
 		t.Fatalf("upstream = %q, want config value", settings.Upstream)
 	}
 }
+
+func TestInitialSettingsForInstallUsesManualUpstream(t *testing.T) {
+	t.Setenv("NETFERRY_UPSTREAM", "")
+	t.Setenv("NETFERRY_LISTEN", "")
+
+	path := filepath.Join(t.TempDir(), "netferry.toml")
+	settings, detected, err := initialSettingsForInstall(path, true, "http://127.0.0.1:7897", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detected != nil {
+		t.Fatalf("detected proxy = %v, want manual upstream", detected)
+	}
+	if settings.Upstream != "http://127.0.0.1:7897" {
+		t.Fatalf("upstream = %q, want manual upstream", settings.Upstream)
+	}
+}
+
+func TestInitialSettingsForInstallUpdatesExistingConfig(t *testing.T) {
+	t.Setenv("NETFERRY_UPSTREAM", "")
+	t.Setenv("NETFERRY_LISTEN", "")
+
+	path := filepath.Join(t.TempDir(), "netferry.toml")
+	if err := config.WriteNew(path, config.Default()); err != nil {
+		t.Fatal(err)
+	}
+
+	settings, detected, err := initialSettingsForInstall(path, true, "http://127.0.0.1:7897", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detected != nil {
+		t.Fatalf("detected proxy = %v, want manual upstream", detected)
+	}
+	if settings.Upstream != "http://127.0.0.1:7897" {
+		t.Fatalf("upstream = %q, want manual upstream", settings.Upstream)
+	}
+
+	overrides, err := config.LoadOptional(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overrides.Upstream == nil || *overrides.Upstream != "http://127.0.0.1:7897" {
+		t.Fatalf("stored upstream = %v, want manual upstream", overrides.Upstream)
+	}
+}
+
+func TestInitialSettingsForInstallDryRunKeepsExistingConfig(t *testing.T) {
+	t.Setenv("NETFERRY_UPSTREAM", "")
+	t.Setenv("NETFERRY_LISTEN", "")
+
+	path := filepath.Join(t.TempDir(), "netferry.toml")
+	if err := config.WriteNew(path, config.Default()); err != nil {
+		t.Fatal(err)
+	}
+
+	settings, _, err := initialSettingsForInstall(path, true, "http://127.0.0.1:7897", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.Upstream != "http://127.0.0.1:7897" {
+		t.Fatalf("upstream = %q, want manual upstream", settings.Upstream)
+	}
+
+	overrides, err := config.LoadOptional(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overrides.Upstream == nil || *overrides.Upstream != config.DefaultUpstream {
+		t.Fatalf("stored upstream = %v, want unchanged default", overrides.Upstream)
+	}
+}
+
+func TestInitialSettingsForInstallNoDetectKeepsDefault(t *testing.T) {
+	t.Setenv("NETFERRY_UPSTREAM", "")
+	t.Setenv("NETFERRY_LISTEN", "")
+
+	path := filepath.Join(t.TempDir(), "netferry.toml")
+	settings, detected, err := initialSettingsForInstall(path, false, "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detected != nil {
+		t.Fatalf("detected proxy = %v, want no detection", detected)
+	}
+	if settings.Upstream != config.DefaultUpstream {
+		t.Fatalf("upstream = %q, want default %q", settings.Upstream, config.DefaultUpstream)
+	}
+}

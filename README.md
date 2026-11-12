@@ -68,6 +68,10 @@ the SHA-256 digest for every archive.
 
 You do not need Go to use a release archive.
 
+Start your proxy application before running `setup` or the installer. You do
+not need to enable its system proxy setting; NetFerry probes the local
+listening port directly.
+
 The default configuration expects a local proxy at:
 
 ```text
@@ -106,7 +110,10 @@ registry, macOS `scutil`, and GNOME/KDE on Linux) plus the `HTTPS_PROXY`,
 `HTTP_PROXY`, and `ALL_PROXY` environment variables, then falls back to common
 v2rayN, Clash/Mihomo, Shadowsocks, and sing-box/NekoBox ports. Each endpoint is
 probed for SOCKS5 and HTTP support. Use `--no-detect` when running `setup` to
-keep the configured default instead.
+keep the configured default instead. If detection finds nothing, `setup` stops
+with an error instead of silently writing the default. Start the proxy
+application and retry, pass `--upstream <url>`, or use `--no-detect` to accept
+the default.
 
 Use the matching URL scheme:
 
@@ -115,7 +122,7 @@ Use the matching URL scheme:
 upstream = "socks5h://127.0.0.1:10808"
 
 # HTTP proxy
-upstream = "http://127.0.0.1:7890"
+upstream = "http://127.0.0.1:10808"
 ```
 
 NetFerry still works without a running upstream proxy when the destination can
@@ -129,13 +136,23 @@ be reached directly.
 
 1. Download `netferry-windows-amd64.zip` from GitHub Releases.
 2. Extract it to a permanent directory, such as `C:\Tools\NetFerry`.
-3. Double-click `install.bat`.
-4. Review the detected proxy and installation preview, then answer `Y`.
-5. Restart Codex, Claude Code, DeepSeek harness, terminals, IDEs, and other
+3. Start your proxy application. Its system proxy setting can stay off.
+4. Double-click `install.bat`.
+5. Review the detected proxy and installation preview, then answer `Y`.
+6. Restart Codex, Claude Code, DeepSeek harness, terminals, IDEs, and other
    tools that should inherit the new environment.
 
 No additional `setup` commands are required. The script runs detection,
 `setup --dry-run`, confirmation, and `setup` automatically.
+
+If detection fails, the installer offers three choices:
+
+- `R`: retry detection after starting the proxy application.
+- `S`: skip detection and install with the default upstream; you can correct
+  it later with `netferry setup --upstream <url>`.
+- `Q`: quit without changing the system.
+
+When detection succeeds, answer `Y` to confirm the installation.
 
 #### Manual installation
 
@@ -144,6 +161,10 @@ If you prefer PowerShell, preview and install manually:
 ```powershell
 .\netferry.exe setup --dry-run
 .\netferry.exe setup
+
+# Or specify the upstream directly when detection cannot find it:
+.\netferry.exe setup --dry-run --upstream http://127.0.0.1:10808
+.\netferry.exe setup --upstream http://127.0.0.1:10808
 ```
 
 Manual installation performs the same changes as `install.bat`.
@@ -176,6 +197,9 @@ chmod +x netferry
 Use the archive matching your OS and architecture. On Linux, sign out and back
 in so the desktop session loads `environment.d`. On macOS, restart Agent
 applications after setup.
+
+`install.sh` shows the same `R` / `S` / `Q` prompt when no local proxy is
+detected.
 
 ## Verify the installation
 
@@ -267,6 +291,14 @@ Find the generated file:
 ```powershell
 .\netferry.exe config path
 ```
+
+To change only the upstream proxy without editing the file:
+
+```powershell
+.\netferry.exe config set upstream http://127.0.0.1:10808
+```
+
+`setup --upstream <url>` also updates an existing configuration.
 
 Edit it with a text editor:
 
@@ -378,10 +410,10 @@ netferry run      Run any command with the local proxy environment
 netferry doctor   Test direct and upstream routes
 netferry env      Print shell environment setup
 netferry status   Show proxy and service status
-netferry config   Locate, show, or initialize configuration
+netferry config   Locate, show, initialize, or update configuration
 netferry detect   Detect common local proxy ports and protocols
-netferry setup    Install automatic startup and proxy environment
-netferry install  Install user-level automatic startup
+netferry setup    Install automatic startup and proxy environment [--upstream url]
+netferry install  Install user-level automatic startup [--upstream url]
 netferry uninstall Remove startup and managed environment
 netferry service  Start, stop, or inspect the startup service
 netferry version  Print the version

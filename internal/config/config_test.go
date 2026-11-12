@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -80,5 +81,52 @@ func TestValidateRejectsUnsupportedUpstream(t *testing.T) {
 	settings.Upstream = "ftp://127.0.0.1:10808"
 	if err := settings.Validate(); err == nil {
 		t.Fatal("expected unsupported upstream error")
+	}
+}
+
+func TestUpdateUpstreamPreservesOtherContent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "netferry.toml")
+	if err := WriteNew(path, Default()); err != nil {
+		t.Fatal(err)
+	}
+	if err := UpdateUpstream(path, "http://127.0.0.1:7897"); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "# NetFerry configuration") {
+		t.Fatalf("comment was not preserved:\n%s", data)
+	}
+
+	overrides, err := LoadOptional(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overrides.Upstream == nil || *overrides.Upstream != "http://127.0.0.1:7897" {
+		t.Fatalf("upstream = %v, want updated value", overrides.Upstream)
+	}
+	if overrides.Listen == nil || *overrides.Listen != DefaultListen {
+		t.Fatalf("listen = %v, want unchanged default", overrides.Listen)
+	}
+}
+
+func TestUpdateUpstreamRejectsInvalidURL(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "netferry.toml")
+	if err := WriteNew(path, Default()); err != nil {
+		t.Fatal(err)
+	}
+	if err := UpdateUpstream(path, "ftp://127.0.0.1:10808"); err == nil {
+		t.Fatal("expected unsupported upstream error")
+	}
+
+	overrides, err := LoadOptional(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overrides.Upstream == nil || *overrides.Upstream != DefaultUpstream {
+		t.Fatalf("upstream = %v, want unchanged default", overrides.Upstream)
 	}
 }

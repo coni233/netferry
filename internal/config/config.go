@@ -209,6 +209,88 @@ func WriteNew(path string, settings Settings) error {
 	return nil
 }
 
+// UpdateUpstream rewrites the upstream value in an existing configuration file
+// while preserving comments and the other keys.
+func UpdateUpstream(path, upstream string) error {
+	upstream = strings.TrimSpace(upstream)
+	if upstream == "" {
+		return errors.New("upstream proxy cannot be empty")
+	}
+
+	overrides, err := LoadOptional(path)
+	if err != nil {
+		return err
+	}
+	settings := Default()
+	settings.Apply(overrides)
+	settings.Upstream = upstream
+	if err := settings.Validate(); err != nil {
+		return err
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read config %s: %w", path, err)
+	}
+	lines := strings.Split(string(data), "\n")
+	replaced := false
+	for index, line := range lines {
+		key, _, ok := strings.Cut(strings.TrimSpace(stripComment(line)), "=")
+		if !ok || !strings.EqualFold(strings.TrimSpace(key), "upstream") {
+			continue
+		}
+		suffix := ""
+		if strings.HasSuffix(line, "\r") {
+			suffix = "\r"
+		}
+		lines[index] = "upstream = " + strconv.Quote(upstream) + suffix
+		replaced = true
+		break
+	}
+	if !replaced {
+		suffix := ""
+		if strings.Contains(string(data), "\r\n") {
+			suffix = "\r"
+		}
+		line := "upstream = " + strconv.Quote(upstream) + suffix
+		if last := len(lines) - 1; last >= 0 && strings.TrimSpace(lines[last]) == "" {
+			lines = append(lines[:last], line, "")
+		} else {
+			lines = append(lines, line)
+		}
+	}
+	return writeFileAtomic(path, []byte(strings.Join(lines, "\n")))
+}
+
+func writeFileAtomic(path string, content []byte) error {
+	temp, err := os.CreateTemp(filepath.Dir(path), ".netferry-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temporary config: %w", err)
+	}
+	tempName := temp.Name()
+	defer os.Remove(tempName)
+
+	if err := temp.Chmod(0o600); err != nil {
+		temp.Close()
+		return fmt.Errorf("set config permissions: %w", err)
+	}
+	if _, err := temp.Write(content); err != nil {
+		temp.Close()
+		return fmt.Errorf("write config %s: %w", path, err)
+	}
+	if err := temp.Sync(); err != nil {
+		temp.Close()
+		return fmt.Errorf("sync config %s: %w", path, err)
+	}
+	if err := temp.Close(); err != nil {
+		return fmt.Errorf("close config %s: %w", path, err)
+	}
+	if err := os.Rename(tempName, path); err != nil {
+		return fmt.Errorf("replace config %s: %w", path, err)
+	}
+	return nil
+}
+
 func Format(settings Settings) string {
 	return fmt.Sprintf(
 		"listen = %s\nupstream = %s\nprobe_timeout = %s\ncache_ttl = %s",

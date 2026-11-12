@@ -60,6 +60,9 @@ go build -o bin/netferry.exe ./cmd/netferry
 
 使用正式发布包时不需要安装 Go。
 
+运行 `setup` 或安装脚本前，请先启动代理软件。系统代理开关不需要打开，
+NetFerry 会直接探测本地监听端口。
+
 默认配置假定本机代理地址为：
 
 ```text
@@ -94,7 +97,9 @@ socks5h://127.0.0.1:10808
 检测会先读取操作系统代理设置（Windows 注册表、macOS `scutil`、Linux 的
 GNOME/KDE 设置）以及 `HTTPS_PROXY`、`HTTP_PROXY`、`ALL_PROXY` 环境变量，再回退到
 v2rayN、Clash/Mihomo、Shadowsocks、sing-box/NekoBox 的常见端口，并逐个探测 SOCKS5
-和 HTTP 支持情况。如果希望保留配置默认值，可以在执行 `setup` 时增加 `--no-detect`。
+和 HTTP 支持情况。如果什么都没检测到，`setup` 会直接报错并停止，不会静默写入默认值。
+启动代理软件后重试，或者传入 `--upstream <url>` 手动指定；也可以使用 `--no-detect`
+接受默认值。
 
 配置时要使用与端口匹配的协议：
 
@@ -103,7 +108,7 @@ v2rayN、Clash/Mihomo、Shadowsocks、sing-box/NekoBox 的常见端口，并逐�
 upstream = "socks5h://127.0.0.1:10808"
 
 # HTTP 代理
-upstream = "http://127.0.0.1:7890"
+upstream = "http://127.0.0.1:10808"
 ```
 
 即使上游代理程序没有运行，目标可以直连时 NetFerry 仍然可以正常工作。
@@ -116,13 +121,23 @@ upstream = "http://127.0.0.1:7890"
 
 1. 从 GitHub Releases 下载 `netferry-windows-amd64.zip`。
 2. 解压到长期保留的目录，例如 `C:\Tools\NetFerry`。
-3. 双击 `install.bat`。
-4. 查看检测到的代理和安装预览，然后输入 `Y` 确认。
-5. 完全退出并重新启动 Codex、Claude Code、DeepSeek harness、终端、IDE
+3. 启动代理软件，系统代理开关可以保持关闭。
+4. 双击 `install.bat`。
+5. 查看检测到的代理和安装预览，然后输入 `Y` 确认。
+6. 完全退出并重新启动 Codex、Claude Code、DeepSeek harness、终端、IDE
    以及其他需要继承新环境的程序。
 
 不需要再手动执行 `setup`。`install.bat` 会自动完成代理检测、
 `setup --dry-run`、确认和正式 `setup`。
+
+如果检测失败，安装程序会提供三个选项：
+
+- `R`：启动代理软件后重新检测。
+- `S`：跳过检测，使用默认上游继续安装；之后可以用
+  `netferry setup --upstream <url>` 修正。
+- `Q`：退出安装，不修改系统。
+
+检测成功时，输入 `Y` 确认安装。
 
 #### 手动安装
 
@@ -131,6 +146,10 @@ upstream = "http://127.0.0.1:7890"
 ```powershell
 .\netferry.exe setup --dry-run
 .\netferry.exe setup
+
+# 检测不到时可以手动指定上游代理：
+.\netferry.exe setup --dry-run --upstream http://127.0.0.1:10808
+.\netferry.exe setup --upstream http://127.0.0.1:10808
 ```
 
 手动安装与双击 `install.bat` 执行的操作相同。
@@ -161,6 +180,8 @@ chmod +x netferry
 
 请选择匹配系统和 CPU 架构的压缩包。Linux 用户需要注销并重新登录，使桌面会话
 加载 `environment.d`。macOS 用户安装后需要重启 Agent 应用。
+
+检测不到本地代理时，`install.sh` 也会显示同样的 `R` / `S` / `Q` 选项。
 
 ## 验证安装
 
@@ -249,6 +270,14 @@ NetFerry 不是 VPN，也不是命令包装器。没有网络活动的命令不�
 ```powershell
 .\netferry.exe config path
 ```
+
+如果只想更新上游代理，不必手动编辑文件：
+
+```powershell
+.\netferry.exe config set upstream http://127.0.0.1:10808
+```
+
+`setup --upstream <url>` 也会更新已有配置。
 
 使用文本编辑器修改：
 
@@ -353,10 +382,10 @@ netferry run      在代理环境中运行任意命令
 netferry doctor   测试直连和上游代理路径
 netferry env      输出 Shell 环境变量配置
 netferry status   查看代理和后台服务状态
-netferry config   查看、显示或初始化配置
+netferry config   查看、显示、初始化或更新配置
 netferry detect   检测常见本地代理端口和协议
-netferry setup    安装自动启动和代理环境
-netferry install  安装用户级自动启动
+netferry setup    安装自动启动和代理环境 [--upstream url]
+netferry install  安装用户级自动启动 [--upstream url]
 netferry uninstall 删除自动启动并恢复受管理的环境变量
 netferry service  启动、停止或检查后台服务
 netferry version  输出当前版本
