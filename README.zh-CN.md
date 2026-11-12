@@ -101,6 +101,10 @@ v2rayN、Clash/Mihomo、Shadowsocks、sing-box/NekoBox 的常见端口，并逐�
 启动代理软件后重试，或者传入 `--upstream <url>` 手动指定；也可以使用 `--no-detect`
 接受默认值。
 
+如果配置文件已经存在，`setup` 会直接复用，不会再次自动检测。如果配置的上游代理
+当前不可达，会输出警告；可以用 `netferry config set upstream <url>` 或
+`setup --upstream <url>` 更新。
+
 配置时要使用与端口匹配的协议：
 
 ```toml

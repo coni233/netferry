@@ -617,6 +617,7 @@ func runInstall(args []string) int {
 	if detected == nil && strings.TrimSpace(*upstreamFlag) != "" {
 		fmt.Printf("upstream: %s (manual)\n", settings.Upstream)
 	}
+	warnUnreachableUpstream(settings, detected, *upstreamFlag)
 
 	if !*dryRun {
 		if err := config.WriteNew(configPath, settings); err != nil && !errors.Is(err, config.ErrAlreadyExists) {
@@ -670,6 +671,7 @@ func runSetup(args []string) int {
 	if detected == nil && strings.TrimSpace(*upstreamFlag) != "" {
 		fmt.Printf("upstream: %s (manual)\n", settings.Upstream)
 	}
+	warnUnreachableUpstream(settings, detected, *upstreamFlag)
 
 	if !*dryRun {
 		if err := config.WriteNew(configPath, settings); err != nil && !errors.Is(err, config.ErrAlreadyExists) {
@@ -794,6 +796,32 @@ func printDetectedProxy(candidate *detect.Candidate) {
 		return
 	}
 	fmt.Printf("detected upstream: %s (%s)\n", candidate.Upstream, candidate.Software)
+}
+
+func warnUnreachableUpstream(settings config.Settings, detected *detect.Candidate, upstreamOverride string) {
+	if detected != nil || strings.TrimSpace(upstreamOverride) != "" {
+		return
+	}
+	address, ok := upstreamAddress(settings.Upstream)
+	if !ok {
+		return
+	}
+	if _, _, reachable := detect.Probe(context.Background(), address, 500*time.Millisecond); reachable {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "warning: upstream %s is not reachable\n", redactProxyURL(settings.Upstream))
+	fmt.Fprintln(os.Stderr, "  Start your proxy app, or update it with: netferry config set upstream <url>")
+}
+
+func upstreamAddress(raw string) (string, bool) {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" {
+		return "", false
+	}
+	if _, _, err := net.SplitHostPort(parsed.Host); err != nil {
+		return "", false
+	}
+	return parsed.Host, true
 }
 
 func runUninstall(args []string) int {

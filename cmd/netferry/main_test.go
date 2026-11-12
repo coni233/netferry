@@ -48,6 +48,23 @@ func TestNormalizeAddress(t *testing.T) {
 	}
 }
 
+func TestUpstreamAddress(t *testing.T) {
+	tests := map[string]string{
+		"http://127.0.0.1:7897":        "127.0.0.1:7897",
+		"socks5h://127.0.0.1:10808":    "127.0.0.1:10808",
+		"http://user:pass@127.0.0.1:1": "127.0.0.1:1",
+	}
+	for input, want := range tests {
+		got, ok := upstreamAddress(input)
+		if !ok || got != want {
+			t.Fatalf("upstreamAddress(%q) = %q, %v; want %q", input, got, ok, want)
+		}
+	}
+	if _, ok := upstreamAddress("http://127.0.0.1"); ok {
+		t.Fatal("upstreamAddress accepted a URL without a port")
+	}
+}
+
 func TestResolveSettingsPrecedence(t *testing.T) {
 	t.Setenv("NETFERRY_CONFIG", "")
 	t.Setenv("NETFERRY_LISTEN", "127.0.0.1:18002")

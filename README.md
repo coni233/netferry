@@ -115,6 +115,11 @@ with an error instead of silently writing the default. Start the proxy
 application and retry, pass `--upstream <url>`, or use `--no-detect` to accept
 the default.
 
+When a configuration already exists, `setup` reuses it instead of running
+detection again. It prints a warning if the configured upstream is not
+reachable; update it with `netferry config set upstream <url>` or
+`setup --upstream <url>`.
+
 Use the matching URL scheme:
 
 ```toml
