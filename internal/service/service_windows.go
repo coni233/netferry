@@ -9,13 +9,15 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
 const (
-	managerName  = "Windows logon command"
-	runKeyPath   = `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
-	runValueName = "NetFerry"
+	managerName    = "Windows logon command"
+	runKeyPath     = `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+	runValueName   = "NetFerry"
+	createNoWindow = 0x08000000
 )
 
 func ManagerName() string {
@@ -253,10 +255,13 @@ func startScript(script, pidPath, logPath string) error {
 	command := exec.Command(
 		"powershell.exe",
 		"-NoProfile",
-		"-WindowStyle", "Hidden",
 		"-ExecutionPolicy", "Bypass",
 		"-File", script,
 	)
+	command.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: createNoWindow,
+	}
 	command.Stdout = logFile
 	command.Stderr = logFile
 	if err := command.Start(); err != nil {
