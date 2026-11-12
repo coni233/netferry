@@ -102,3 +102,13 @@ jobs:
               --title "NetFerry ${tag}" \
               --generate-notes
           fi
+
+          body="$(gh release view "$tag" --json body -q .body)"
+          if ! printf '%s' "$body" | grep -q "Which file should I download?"; then
+            {
+              cat .github/release-notes.md
+              echo
+              printf '%s\n' "$body"
+            } > dist/release-notes.md
+            gh release edit "$tag" --notes-file dist/release-notes.md
+          fi

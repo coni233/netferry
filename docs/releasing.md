@@ -18,7 +18,8 @@ The workflow:
 4. Packages each binary with `README.md`, `LICENSE`, and platform installer
    scripts.
 5. Generates `checksums.txt`.
-6. Creates a GitHub Release with generated release notes.
+6. Creates a GitHub Release with generated release notes, prefixed by
+   `.github/release-notes.md`, which explains how to choose the right archive.
 
 The version in the tag must use the `vX.Y.Z` form. Release archives use the
 following names:
