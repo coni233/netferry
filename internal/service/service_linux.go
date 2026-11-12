@@ -19,6 +19,22 @@ func ManagerName() string {
 	return managerName
 }
 
+func Preflight() error {
+	if _, err := exec.LookPath("systemctl"); err != nil {
+		return fmt.Errorf("systemctl not found; automatic startup requires systemd with a user session")
+	}
+	output, err := exec.Command("systemctl", "--user", "show-environment").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf(
+			"systemd user manager is not available: %w: %s\n"+
+				"run setup from a graphical login session on a systemd-based distribution, or use --no-service",
+			err,
+			strings.TrimSpace(string(output)),
+		)
+	}
+	return nil
+}
+
 func Install(spec Spec, dryRun bool) ([]string, error) {
 	spec, err := spec.Normalize()
 	if err != nil {

@@ -22,6 +22,10 @@ func ManagerName() string {
 	return managerName
 }
 
+func Preflight() error {
+	return nil
+}
+
 func Install(spec Spec, dryRun bool) ([]string, error) {
 	spec, err := spec.Normalize()
 	if err != nil {

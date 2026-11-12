@@ -203,6 +203,11 @@ Use the archive matching your OS and architecture. On Linux, sign out and back
 in so the desktop session loads `environment.d`. On macOS, restart Agent
 applications after setup.
 
+Automatic startup requires a normal desktop session: a systemd user manager on
+Linux or a logged-in GUI session on macOS. `setup` and `install.sh` do not need
+root or `sudo`. In WSL, containers, or SSH-only sessions, pass `--no-service`
+and start `netferry serve` manually.
+
 `install.sh` shows the same `R` / `S` / `Q` prompt when no local proxy is
 detected.
 

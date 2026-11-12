@@ -607,6 +607,12 @@ func runInstall(args []string) int {
 		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
 		return 1
 	}
+	if err := service.Preflight(); err != nil {
+		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+		return 1
+	}
+	_, statErr := os.Stat(configPath)
+	configExisted := statErr == nil
 
 	settings, detected, err := initialSettingsForInstall(configPath, !*noDetect, *upstreamFlag, *dryRun)
 	if err != nil {
@@ -637,6 +643,7 @@ func runInstall(args []string) int {
 	}, *dryRun)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+		printInstallIncomplete(configPath, configExisted, false)
 		return 1
 	}
 	printServiceMessages(service.ManagerName(), messages, *dryRun)
@@ -662,6 +669,14 @@ func runSetup(args []string) int {
 		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
 		return 1
 	}
+	if !*noService {
+		if err := service.Preflight(); err != nil {
+			fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+			return 1
+		}
+	}
+	_, statErr := os.Stat(configPath)
+	configExisted := statErr == nil
 	settings, detected, err := initialSettingsForInstall(configPath, !*noDetect, *upstreamFlag, *dryRun)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
@@ -693,6 +708,7 @@ func runSetup(args []string) int {
 		}, *dryRun)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+			printInstallIncomplete(configPath, configExisted, !*noEnvironment)
 			return 1
 		}
 		printServiceMessages(service.ManagerName(), messages, *dryRun)
@@ -701,6 +717,9 @@ func runSetup(args []string) int {
 		messages, err := agentenv.Install(settings.Listen, *dryRun)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "netferry: %v\n", err)
+			if !*noService {
+				fmt.Fprintln(os.Stderr, "netferry: automatic startup was installed, but proxy environment variables were not")
+			}
 			return 1
 		}
 		printServiceMessages(agentenv.ManagerName(), messages, *dryRun)
@@ -796,6 +815,17 @@ func printDetectedProxy(candidate *detect.Candidate) {
 		return
 	}
 	fmt.Printf("detected upstream: %s (%s)\n", candidate.Upstream, candidate.Software)
+}
+
+func printInstallIncomplete(configPath string, configExisted, includeEnvironment bool) {
+	if !configExisted {
+		fmt.Fprintf(os.Stderr, "netferry: configuration was created at %s\n", configPath)
+	}
+	if includeEnvironment {
+		fmt.Fprintln(os.Stderr, "netferry: automatic startup and proxy environment variables were not installed; fix the error above and rerun")
+		return
+	}
+	fmt.Fprintln(os.Stderr, "netferry: automatic startup was not installed; fix the error above and rerun")
 }
 
 func warnUnreachableUpstream(settings config.Settings, detected *detect.Candidate, upstreamOverride string) {

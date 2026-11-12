@@ -10,6 +10,10 @@ func ManagerName() string {
 	return managerName
 }
 
+func Preflight() error {
+	return errors.New("automatic startup is not supported on this platform")
+}
+
 func Install(Spec, bool) ([]string, error) {
 	return nil, errors.New("automatic startup is not supported on this platform")
 }

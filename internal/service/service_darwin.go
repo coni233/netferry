@@ -20,6 +20,20 @@ func ManagerName() string {
 	return managerName
 }
 
+func Preflight() error {
+	domain := fmt.Sprintf("gui/%d", os.Getuid())
+	output, err := exec.Command("launchctl", "print", domain).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf(
+			"launchd GUI session is not available: %w: %s\n"+
+				"run setup from Terminal in a logged-in macOS desktop session, or use --no-service",
+			err,
+			strings.TrimSpace(string(output)),
+		)
+	}
+	return nil
+}
+
 func Install(spec Spec, dryRun bool) ([]string, error) {
 	spec, err := spec.Normalize()
 	if err != nil {

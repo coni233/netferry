@@ -185,6 +185,10 @@ chmod +x netferry
 请选择匹配系统和 CPU 架构的压缩包。Linux 用户需要注销并重新登录，使桌面会话
 加载 `environment.d`。macOS 用户安装后需要重启 Agent 应用。
 
+自动启动需要正常的桌面会话：Linux 上要有 systemd 用户管理器，macOS 上要处于
+已登录的 GUI 会话。`setup` 和 `install.sh` 不需要 root 或 `sudo`。在 WSL、
+容器或只有 SSH 的环境中，请加 `--no-service` 并手动运行 `netferry serve`。
+
 检测不到本地代理时，`install.sh` 也会显示同样的 `R` / `S` / `Q` 选项。
 
 ## 验证安装
